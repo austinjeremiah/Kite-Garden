@@ -1,0 +1,63 @@
+specVersion: 1.0.0
+indexerHints:
+  prune: auto
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: AttractorGuard
+    network: kite-ai-testnet
+    source:
+      address: "ATTRACTOR_GUARD_ADDRESS_PLACEHOLDER"
+      abi: AttractorGuard
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Agent
+        - GateDecision
+        - SessionKeyEvent
+      abis:
+        - name: AttractorGuard
+          file: ../abis/AttractorGuard.json
+      eventHandlers:
+        - event: AgentRegistered(indexed bytes32,indexed address,uint256,uint256)
+          handler: handleAgentRegistered
+        - event: SessionKeyIssued(indexed bytes32,indexed address,uint256,uint256,uint256,uint256)
+          handler: handleSessionKeyIssued
+        - event: SessionKeyDenied(indexed bytes32,uint256,uint256,uint256,uint256)
+          handler: handleSessionKeyDenied
+        - event: AgentRevoked(indexed bytes32,indexed address,uint256)
+          handler: handleAgentRevoked
+        - event: BaselineReset(indexed bytes32,uint256,uint256)
+          handler: handleBaselineReset
+        - event: AgentStatusChanged(indexed bytes32,bool,uint256)
+          handler: handleAgentStatusChanged
+      file: ./src/attractor-guard.ts
+  - kind: ethereum
+    name: AgentPaymentSimulator
+    network: kite-ai-testnet
+    source:
+      address: "AGENT_PAYMENT_SIMULATOR_ADDRESS_PLACEHOLDER"
+      abi: AgentPaymentSimulator
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Agent
+        - AgentPayment
+      abis:
+        - name: AgentPaymentSimulator
+          file: ../abis/AgentPaymentSimulator.json
+      eventHandlers:
+        - event: PaymentExecuted(indexed bytes32,indexed uint256,uint256,indexed address,uint8,uint256)
+          handler: handlePaymentExecuted
+        - event: AttackInjected(indexed bytes32,uint256,uint256)
+          handler: handleAttackInjected
+        - event: SeedingCompleted(indexed bytes32,uint256,uint256)
+          handler: handleSeedingCompleted
+      file: ./src/payment-simulator.ts

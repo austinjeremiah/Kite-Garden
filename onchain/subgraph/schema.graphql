@@ -1,0 +1,114 @@
+type Agent @entity {
+  id: Bytes! # agentDID
+  owner: Bytes!
+  spendingLimit: BigInt!
+  thresholdMultiplier: BigInt!
+  transactionCount: BigInt!
+  isActive: Boolean!
+  isRevoked: Boolean!
+  registeredAt: BigInt!
+  lastActivityAt: BigInt!
+  
+  # Relations
+  payments: [AgentPayment!]! @derivedFrom(field: "agent")
+  decisions: [GateDecision!]! @derivedFrom(field: "agent")
+  
+  # Aggregated stats
+  totalPaid: BigInt!
+  sessionsIssued: BigInt!
+  sessionsDenied: BigInt!
+  attacksDetected: BigInt!
+}
+
+type AgentPayment @entity {
+  id: ID! # paymentId
+  agent: Agent!
+  agentDID: Bytes!
+  amount: BigInt!
+  to: Bytes!
+  paymentType: PaymentType!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+enum PaymentType {
+  NORMAL
+  ATTACK
+  SEEDED
+}
+
+type GateDecision @entity {
+  id: ID! # transaction hash + log index
+  agent: Agent!
+  agentDID: Bytes!
+  issued: Boolean!
+  metricValue: BigInt!
+  baselineValue: BigInt!
+  amount: BigInt!
+  sessionKey: Bytes
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type SessionKeyEvent @entity {
+  id: ID! # transaction hash + log index
+  agent: Agent!
+  agentDID: Bytes!
+  eventType: SessionKeyEventType!
+  sessionKey: Bytes
+  amount: BigInt!
+  metricValue: BigInt!
+  baselineValue: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+enum SessionKeyEventType {
+  ISSUED
+  DENIED
+}
+
+type AttackEvent @entity {
+  id: ID! # transaction hash + log index
+  agent: Agent!
+  agentDID: Bytes!
+  burstSize: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type BaselineResetEvent @entity {
+  id: ID! # transaction hash + log index
+  agent: Agent!
+  agentDID: Bytes!
+  newBaseline: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type AgentStatusChangeEvent @entity {
+  id: ID! # transaction hash + log index
+  agent: Agent!
+  agentDID: Bytes!
+  isActive: Boolean!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type SystemStats @entity {
+  id: ID! # Always "system"
+  totalAgents: BigInt!
+  totalPayments: BigInt!
+  totalDecisions: BigInt!
+  totalSessionsIssued: BigInt!
+  totalSessionsDenied: BigInt!
+  totalAttacksDetected: BigInt!
+  lastUpdateTimestamp: BigInt!
+  lastUpdateBlock: BigInt!
+}

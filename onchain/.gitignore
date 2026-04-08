@@ -1,0 +1,36 @@
+# Hardhat
+node_modules
+cache
+artifacts
+typechain-types
+coverage
+coverage.json
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Deployment artifacts
+deployments/
+abis/
+
+# Logs
+*.log
+logs
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Subgraph build
+subgraph/build/
+subgraph/generated/
+subgraph/node_modules/
