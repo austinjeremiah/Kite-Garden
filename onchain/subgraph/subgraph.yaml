@@ -8,7 +8,7 @@ dataSources:
     name: AttractorGuard
     network: kite-ai-testnet
     source:
-      address: "ATTRACTOR_GUARD_ADDRESS_PLACEHOLDER"
+      address: "0x2B1A80A3CF8E690b7f69694fF100Bd5c85AF75DA"
       abi: AttractorGuard
       startBlock: 0
     mapping:
@@ -40,7 +40,7 @@ dataSources:
     name: AgentPaymentSimulator
     network: kite-ai-testnet
     source:
-      address: "AGENT_PAYMENT_SIMULATOR_ADDRESS_PLACEHOLDER"
+      address: "0xA900eF9aB5907f178b6C562f044c896c42c31F7D"
       abi: AgentPaymentSimulator
       startBlock: 0
     mapping:
