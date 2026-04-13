@@ -3,26 +3,26 @@
 import { useEffect, useState, useRef } from "react";
 
 const metrics = [
-  { 
-    value: 12847392, 
-    suffix: "", 
+  {
+    value: 300,
+    suffix: "+",
     prefix: "",
-    label: "Tasks completed today",
-    sublabel: "by 23,847 active agents",
+    label: "Transactions seeded per demo agent",
+    sublabel: "normal behavioral baseline",
   },
-  { 
-    value: 99, 
-    suffix: ".99%", 
+  {
+    value: 50,
+    suffix: "",
     prefix: "",
-    label: "Availability",
-    sublabel: "across all regions",
+    label: "Baseline rolling window",
+    sublabel: "last N computed metrics",
   },
-  { 
-    value: 340, 
-    suffix: "ms", 
-    prefix: "<",
-    label: "Average execution",
-    sublabel: "p99 latency",
+  {
+    value: 2,
+    suffix: "σ",
+    prefix: "±",
+    label: "Anomaly detection threshold",
+    sublabel: "standard deviations from mean",
   },
 ];
 
@@ -259,9 +259,9 @@ export function MetricsSection() {
             <h2 className={`text-6xl md:text-7xl lg:text-[140px] font-display tracking-tight leading-[0.95] transition-all duration-1000 ${
               isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
             }`}>
-              Real-time
+              Behavioral
               <br />
-              <span className="text-muted-foreground">agent metrics.</span>
+              <span className="text-muted-foreground">by the numbers.</span>
             </h2>
           </div>
         </div>
@@ -328,11 +328,10 @@ export function MetricsSection() {
         <div className={`mt-16 pt-8 border-t border-foreground/10 flex flex-wrap items-center gap-x-12 gap-y-4 text-sm font-mono text-muted-foreground transition-all duration-1000 delay-500 ${
           isVisible ? "opacity-100" : "opacity-0"
         }`}>
-          <span>OpenAI GPT-4 Turbo</span>
-          <span>Anthropic Claude 3</span>
-          <span>Mistral Large</span>
-          <span>Llama 3</span>
-          <span className="text-foreground">+12 more models</span>
+          <span>Takens (1981) — delay embedding</span>
+          <span>Grassberger-Procaccia (1983) — correlation dimension</span>
+          <span>nolds.sampen() — early-stage agents</span>
+          <span className="text-foreground">nolds.corr_dim() — mature agents</span>
         </div>
       </div>
     </section>

@@ -21,9 +21,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'COMPUTE - AI Agents for Distributed Computing',
-  description: 'Deploy autonomous AI agents on distributed infrastructure. Offload complex tasks to intelligent workers that run 24/7.',
-  generator: 'v0.app',
+  title: 'KiteGarden — Behavioral Session Key Revocation for AI Agents',
+  description: 'KiteGarden blocks AI agents when they stop behaving like themselves — using phase space analysis and on-chain identity on Kite L1 testnet.',
 }
 
 export default function RootLayout({

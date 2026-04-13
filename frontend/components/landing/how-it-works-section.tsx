@@ -5,39 +5,42 @@ import { useEffect, useRef, useState } from "react";
 const steps = [
   {
     number: "01",
-    title: "Define",
-    subtitle: "your agent",
-    description: "Describe what your agent should do. Set its capabilities, constraints, and goals in natural language or code.",
-    code: `const researcher = new Agent({
-  role: 'Research Analyst',
-  capabilities: ['web', 'docs', 'api'],
-  memory: true,
-  autonomy: 'full'
-})`,
+    title: "Register",
+    subtitle: "on-chain identity",
+    description: "Agent owner calls register() on AgentRegistry.sol. A unique agentId (bytes32) is derived on-chain. Goldsky indexes the AgentRegistered event immediately. The first 30 transactions establish the behavioral baseline.",
+    code: `// AgentRegistry.sol
+register("alice-expense-agent", wallet)
+// → agentId: 0x4a3b...f9c2
+// → AgentRegistered event emitted
+// → Goldsky indexes within 1 block`,
   },
   {
     number: "02",
-    title: "Assign",
-    subtitle: "the task",
-    description: "Give your agent a mission. It breaks down complex tasks into steps and executes them autonomously.",
-    code: `await researcher.execute({
-  task: 'Analyze competitor pricing',
-  sources: ['public-data', 'news'],
-  output: 'structured-report',
-  deadline: '2h'
-})`,
+    title: "Gate",
+    subtitle: "every payment",
+    description: "Before any payment, the agent calls POST /api/gate. The backend queries Goldsky for transaction history, runs nolds analysis (SampEn or correlation dimension), and compares against the stored baseline.",
+    code: `// Agent calls gate before every payment
+POST /api/gate
+{ agentId, amount, destination, x402Payload }
+
+// Backend flow:
+// 1. Fetch history from Goldsky GraphQL
+// 2. POST amounts[] to Python /analyze
+// 3. Compare metric vs baseline ± 2σ`,
   },
   {
     number: "03",
-    title: "Monitor",
-    subtitle: "& scale",
-    description: "Track progress in real-time. Spin up more agents as needed. Pay only for compute used.",
-    code: `optimus.dashboard({
-  agents: [researcher],
-  metrics: ['tasks', 'latency', 'cost'],
-  alerts: true
-})
-// 847 tasks completed today`,
+    title: "Issue",
+    subtitle: "or freeze",
+    description: "STABLE: gokite-aa-sdk issues a 60-second session key. DIVERGED: freezeAgent() is called on-chain, emitting AgentFrozen. No session key. Agent cannot pay. Human reviews the on-chain audit trail.",
+    code: `// STABLE path
+addSessionKeyRule(sessionKey, agentId, selector, limit)
+// → verdict: "ISSUED"
+
+// DIVERGED path
+freezeAgent(agentId, metricValue)
+// → AgentFrozen event on Kite explorer
+// → verdict: "DENIED"`,
   },
 ];
 
@@ -81,16 +84,16 @@ export function HowItWorksSection() {
             <div className={`transition-all duration-1000 ${isVisible ? "translate-x-0 opacity-100" : "-translate-x-12 opacity-0"}`}>
               <span className="inline-flex items-center gap-3 text-sm font-mono text-white/40 mb-8">
                 <span className="w-12 h-px bg-white/20" />
-                Process
+                How it works
               </span>
             </div>
             
             <h2 className={`text-6xl md:text-7xl lg:text-[128px] font-display tracking-tight leading-[0.85] transition-all duration-1000 delay-100 ${
               isVisible ? "translate-y-0 opacity-100" : "translate-y-16 opacity-0"
             }`}>
-              <span className="block">Define.</span>
-              <span className="block text-white/30">Deploy.</span>
-              <span className="block text-white/10">Scale.</span>
+              <span className="block">Register.</span>
+              <span className="block text-white/30">Gate.</span>
+              <span className="block text-white/10">Freeze.</span>
             </h2>
           </div>
 

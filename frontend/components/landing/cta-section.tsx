@@ -51,45 +51,54 @@ export function CtaSection() {
               {/* Left content */}
               <div className="flex-1">
                 <h2 className="text-6xl md:text-7xl lg:text-[72px] font-display tracking-tight mb-8 leading-[0.95]">
-                  Ready to delegate
+                  Ready to protect
                   <br />
-                  to AI agents?
+                  your AI agents?
                 </h2>
 
                 <p className="text-xl text-muted-foreground mb-12 leading-relaxed max-w-xl">
-                  Join teams automating complex workflows with COMPUTE agents. 
-                  Deploy your first agent in minutes.
+                  Register an agent on Kite testnet. Its behavioral baseline is committed on-chain. The gate runs on every payment. Any shape shift triggers a cryptographic freeze.
                 </p>
 
                 <div className="flex flex-col sm:flex-row items-start gap-4">
                   <Button
                     size="lg"
-                    className="bg-foreground hover:bg-foreground/90 text-background px-8 h-14 text-base rounded-full group"
+                    className="bg-foreground hover:bg-foreground/90 text-background px-8 h-14 text-base rounded-full group font-mono"
+                    asChild
                   >
-                    Deploy your first agent
-                    <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
+                    <a href="/register">
+                      Register an agent
+                      <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
+                    </a>
                   </Button>
                   <Button
                     size="lg"
                     variant="outline"
-                    className="h-14 px-8 text-base rounded-full border-foreground/20 hover:bg-foreground/5"
+                    className="h-14 px-8 text-base rounded-full border-foreground/20 hover:bg-foreground/5 font-mono"
+                    asChild
                   >
-                    Book a demo
+                    <a href="/demo">Watch the demo</a>
                   </Button>
                 </div>
 
                 <p className="text-sm text-muted-foreground mt-8 font-mono">
-                  1,000 free tasks with COMPUTE
+                  Built on Kite L1 testnet · Goldsky · x402 · nolds
                 </p>
               </div>
 
-              {/* Right image */}
-              <div className="hidden lg:flex items-end justify-center w-[600px] h-[650px] -mr-16">
-                <img
-                  src="/images/bridge.png"
-                  alt="Two trees connected by glowing arcs"
-                  className="w-full h-full object-contain object-bottom"
-                />
+              {/* Right — terminal block */}
+              <div className="hidden lg:flex items-center justify-center w-[480px]">
+                <div className="border border-foreground/20 bg-black/60 w-full p-6 font-mono text-sm">
+                  <div className="text-white/30 mb-4 text-xs">// AgentFrozen event · Kite testnet</div>
+                  <div className="space-y-1">
+                    <div><span className="text-white/40">event  </span><span className="text-[#eca8d6]">AgentFrozen</span></div>
+                    <div><span className="text-white/40">agentId  </span><span className="text-white/80">0x4a3b...f9c2</span></div>
+                    <div><span className="text-white/40">metric   </span><span className="text-red-400">4.87</span></div>
+                    <div><span className="text-white/40">baseline </span><span className="text-white/80">2.09 ± 0.22</span></div>
+                    <div><span className="text-white/40">block    </span><span className="text-white/80">1,847,293</span></div>
+                    <div><span className="text-white/40">status   </span><span className="text-red-400">FROZEN</span></div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

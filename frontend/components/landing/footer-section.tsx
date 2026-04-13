@@ -4,35 +4,35 @@ import { ArrowUpRight } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 const footerLinks = {
-  Product: [
-    { name: "Agent capabilities", href: "#features" },
-    { name: "How it works", href: "#how-it-works" },
-    { name: "Pricing", href: "#pricing" },
-    { name: "Integrations", href: "#integrations" },
+  App: [
+    { name: "Dashboard", href: "/dashboard" },
+    { name: "Register agent", href: "/register" },
+    { name: "Live demo", href: "/demo" },
+    { name: "How it works", href: "/how-it-works" },
   ],
-  Developers: [
-    { name: "Documentation", href: "#developers" },
-    { name: "Agent SDK", href: "#" },
-    { name: "API Reference", href: "#developers" },
-    { name: "Status", href: "#" },
+  Contracts: [
+    { name: "AgentRegistry.sol", href: "https://testnet.kitescan.ai" },
+    { name: "AttractorGuard.sol", href: "https://testnet.kitescan.ai" },
+    { name: "AgentPaymentSimulator.sol", href: "https://testnet.kitescan.ai" },
+    { name: "Kite explorer", href: "https://testnet.kitescan.ai" },
   ],
-  Company: [
-    { name: "About", href: "#" },
-    { name: "Blog", href: "#" },
-    { name: "Careers", href: "#", badge: "Hiring" },
-    { name: "Contact", href: "#" },
+  Stack: [
+    { name: "Kite AI docs", href: "https://docs.gokite.ai" },
+    { name: "Goldsky docs", href: "https://docs.goldsky.com/chains/kite-ai" },
+    { name: "x402 spec", href: "https://github.com/coinbase/x402" },
+    { name: "nolds docs", href: "https://cschoel.github.io/nolds/nolds.html" },
   ],
-  Legal: [
-    { name: "Privacy", href: "#" },
-    { name: "Terms", href: "#" },
-    { name: "Security", href: "#security" },
+  Math: [
+    { name: "Takens (1981)", href: "#math" },
+    { name: "Grassberger-Procaccia (1983)", href: "#math" },
+    { name: "Sample entropy", href: "#math" },
+    { name: "Correlation dimension", href: "#math" },
   ],
 };
 
 const socialLinks = [
-  { name: "Twitter", href: "#" },
   { name: "GitHub", href: "#" },
-  { name: "LinkedIn", href: "#" },
+  { name: "Kite Explorer", href: "https://testnet.kitescan.ai" },
 ];
 
 function AnimatedWaveCanvas() {
@@ -114,13 +114,13 @@ export function FooterSection() {
           <div className="grid grid-cols-2 md:grid-cols-6 gap-12 lg:gap-8">
             {/* Brand Column */}
             <div className="col-span-2">
-              <a href="#" className="inline-flex items-center gap-2 mb-6">
-                <span className="text-2xl font-display text-white">COMPUTE</span>
-                <span className="text-xs text-white/40 font-mono">TM</span>
+              <a href="/" className="inline-flex items-center gap-2 mb-6">
+                <span className="text-2xl font-mono text-white">KiteGarden</span>
+                <span className="text-xs text-white/40 font-mono">β</span>
               </a>
 
-              <p className="text-white/50 leading-relaxed mb-8 max-w-xs text-sm">
-                Autonomous AI agents for distributed computing. Delegate complex tasks to intelligent workers.
+              <p className="text-white/50 leading-relaxed mb-8 max-w-xs text-sm font-mono">
+                Behavioral session key revocation for autonomous AI agents on Kite L1 testnet.
               </p>
 
               {/* Social Links */}
@@ -166,14 +166,14 @@ export function FooterSection() {
 
         {/* Bottom Bar */}
         <div className="py-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-sm text-white/30">
-            &copy; 2025 COMPUTE. All rights reserved.
+          <p className="text-sm text-white/30 font-mono">
+            &copy; 2026 KiteGarden. Built for Kite AI Hackathon.
           </p>
 
-          <div className="flex items-center gap-4 text-sm text-white/30">
+          <div className="flex items-center gap-4 text-sm text-white/30 font-mono">
             <span className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#eca8d6]" />
-              All agents operational
+              <span className="w-2 h-2 rounded-full bg-[#eca8d6] animate-pulse" />
+              Kite testnet operational
             </span>
           </div>
         </div>

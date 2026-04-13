@@ -5,27 +5,27 @@ import { useEffect, useRef, useState } from "react";
 const features = [
   {
     number: "01",
-    title: "Autonomous Execution",
-    description: "Deploy AI agents that work independently. They analyze, decide, and execute complex multi-step tasks without human intervention.",
-    stats: { value: "99.7%", label: "task completion" },
+    title: "Limit-aware draining",
+    description: "Attacker compromises an agent and fires 9 transactions just under the per-transaction cap to different unknown addresses. Every single one passes. Funds leave. Static limits never notice.",
+    stats: { value: "9×", label: "transactions, all approved" },
   },
   {
     number: "02",
-    title: "Distributed Computing",
-    description: "Offload compute-heavy tasks to our global network. Your agents run on optimized infrastructure across 50+ regions worldwide.",
-    stats: { value: "50+", label: "global regions" },
+    title: "Gradual behavioral drift",
+    description: "Over days, an agent is slowly manipulated via prompt injection. Each individual action is small. The cumulative behavioral shift is massive. Static limits see nothing abnormal.",
+    stats: { value: "∞", label: "days undetected" },
   },
   {
     number: "03",
-    title: "Multi-Agent Orchestration",
-    description: "Coordinate teams of specialized agents. They communicate, delegate, and collaborate to solve complex problems together.",
-    stats: { value: "1000x", label: "parallel execution" },
+    title: "Hallucination burst",
+    description: "Model starts behaving erratically due to context corruption. Fires payments to nonsensical targets at irregular intervals. Nothing exceeds the daily cap. Wallet drains slowly.",
+    stats: { value: "0", label: "alerts triggered" },
   },
   {
     number: "04",
-    title: "Secure Sandboxing",
-    description: "Each agent runs in isolated environments. Full audit trails, encrypted execution, and zero data leakage between tasks.",
-    stats: { value: "0", label: "data breaches" },
+    title: "The behavioral gate",
+    description: "KiteGarden maps every agent's on-chain transaction history into phase space, computes its geometric complexity signature, and refuses the next session key the moment that signature diverges.",
+    stats: { value: "<60s", label: "to cryptographic freeze" },
   },
 ];
 
@@ -147,34 +147,34 @@ export function FeaturesSection() {
 
   return (
     <section
-      id="features"
+      id="problem"
       ref={sectionRef}
       className="relative py-24 lg:py-32 overflow-hidden"
     >
       <div className="max-w-[1400px] mx-auto px-6 lg:px-12">
-        {/* Header - Full width with diagonal layout */}
+        {/* Header */}
         <div className="relative mb-24 lg:mb-32">
           <div className="grid lg:grid-cols-12 gap-8 items-end">
             <div className="lg:col-span-7">
               <span className="inline-flex items-center gap-3 text-sm font-mono text-muted-foreground mb-6">
                 <span className="w-12 h-px bg-foreground/30" />
-                Capabilities
+                Problem
               </span>
               <h2
                 className={`text-6xl md:text-7xl lg:text-[128px] font-display tracking-tight leading-[0.9] transition-all duration-1000 ${
                   isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
                 }`}
               >
-                Intelligent
+                Amount
                 <br />
-                <span className="text-muted-foreground">workers.</span>
+                <span className="text-muted-foreground">≠ behavior.</span>
               </h2>
             </div>
             <div className="lg:col-span-5 lg:pb-4">
               <p className={`text-xl text-muted-foreground leading-relaxed transition-all duration-1000 delay-200 ${
                 isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
               }`}>
-                Deploy autonomous AI agents that execute complex tasks across distributed infrastructure. No supervision required.
+                Static spending limits only ask <span className="text-foreground font-mono">how much?</span> — they never ask whether this still looks like the same agent. Three attack patterns exploit this gap entirely.
               </p>
             </div>
           </div>
