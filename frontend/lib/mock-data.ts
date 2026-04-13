@@ -137,6 +137,132 @@ export const MOCK_METRICS: DashboardMetrics = {
   avgMetricHealth: "drifting",
 };
 
+// ─── Agent detail types ───────────────────────────────────────────────────────
+
+export interface MetricPoint {
+  index: number;
+  value: number;
+  timestamp: string;
+}
+
+export interface TxRecord {
+  id: string;
+  blockNumber: number;
+  amount: number;
+  counterparty: string;
+  timeDelta: number; // seconds since previous tx
+  verdict: Verdict;
+  txHash: string;
+}
+
+export interface SessionKey {
+  address: string;
+  expiresAt: string; // ISO
+  valueLimit: number;
+  functionSelector: string;
+}
+
+export interface AgentDetail {
+  agent: Agent;
+  metricHistory: MetricPoint[];
+  txHistory: TxRecord[];
+  sessionKey: SessionKey | null;
+  freezeReason?: {
+    metricValue: number;
+    threshold: number;
+    timestamp: string;
+    explorerLink: string;
+  };
+}
+
+// ─── Mock detail generators ───────────────────────────────────────────────────
+
+function makeMetricHistory(
+  mean: number,
+  stdDev: number,
+  count: number,
+  injectAnomaly: boolean
+): MetricPoint[] {
+  const points: MetricPoint[] = [];
+  for (let i = 0; i < count; i++) {
+    const base = mean + (Math.random() - 0.5) * stdDev * 1.2;
+    // inject spike in last 5 points if anomaly
+    const spike = injectAnomaly && i >= count - 5 ? mean + stdDev * 4.5 * ((i - (count - 5)) / 5) : 0;
+    points.push({
+      index: i,
+      value: parseFloat((base + spike).toFixed(3)),
+      timestamp: new Date(Date.now() - (count - i) * 30_000).toISOString(),
+    });
+  }
+  return points;
+}
+
+function makeTxHistory(agentId: string, count: number): TxRecord[] {
+  const verdicts: Verdict[] = ["ISSUED", "ISSUED", "ISSUED", "ISSUED", "ISSUED", "DRIFTING", "ISSUED", "DENIED"];
+  const addrs = ["0xAbc1...2345", "0xDef6...789a", "0xGhi0...bcde", "0xJkl3...f012", "0xMno5...3456"];
+  return Array.from({ length: count }, (_, i) => ({
+    id: `${agentId.slice(0, 6)}-tx-${i}`,
+    blockNumber: 1_847_200 + count - i,
+    amount: parseFloat((Math.random() * 40 + 2).toFixed(2)),
+    counterparty: addrs[i % addrs.length],
+    timeDelta: Math.floor(Math.random() * 300 + 30),
+    verdict: i === 3 ? "DENIED" : i === 7 ? "DRIFTING" : "ISSUED",
+    txHash: `0x${Math.random().toString(16).slice(2, 18)}...`,
+  }));
+}
+
+export const MOCK_AGENT_DETAILS: Record<string, AgentDetail> = {
+  // alice — stable mature agent
+  [MOCK_AGENTS[0].agentId]: {
+    agent: MOCK_AGENTS[0],
+    metricHistory: makeMetricHistory(2.09, 0.11, 50, false),
+    txHistory: makeTxHistory(MOCK_AGENTS[0].agentId, 20),
+    sessionKey: {
+      address: "0xSK_alice_a1b2...c3d4",
+      expiresAt: new Date(Date.now() + 38_000).toISOString(),
+      valueLimit: 100,
+      functionSelector: "0xa9059cbb",
+    },
+  },
+  // bob — frozen anomalous agent
+  [MOCK_AGENTS[1].agentId]: {
+    agent: MOCK_AGENTS[1],
+    metricHistory: makeMetricHistory(2.11, 0.13, 50, true),
+    txHistory: makeTxHistory(MOCK_AGENTS[1].agentId, 20),
+    sessionKey: null,
+    freezeReason: {
+      metricValue: 4.87,
+      threshold: 2.37,
+      timestamp: new Date(Date.now() - 45_000).toISOString(),
+      explorerLink: "https://testnet.kitescan.ai/tx/0xfrozen_bob_event",
+    },
+  },
+  // carol — early-stage
+  [MOCK_AGENTS[2].agentId]: {
+    agent: MOCK_AGENTS[2],
+    metricHistory: makeMetricHistory(0.68, 0.09, 30, false),
+    txHistory: makeTxHistory(MOCK_AGENTS[2].agentId, 20),
+    sessionKey: {
+      address: "0xSK_carol_e5f6...g7h8",
+      expiresAt: new Date(Date.now() + 52_000).toISOString(),
+      valueLimit: 50,
+      functionSelector: "0xa9059cbb",
+    },
+  },
+  // dave — mature stable
+  [MOCK_AGENTS[3].agentId]: {
+    agent: MOCK_AGENTS[3],
+    metricHistory: makeMetricHistory(1.95, 0.14, 50, false),
+    txHistory: makeTxHistory(MOCK_AGENTS[3].agentId, 20),
+    sessionKey: {
+      address: "0xSK_dave_i9j0...k1l2",
+      expiresAt: new Date(Date.now() + 15_000).toISOString(),
+      valueLimit: 200,
+      functionSelector: "0xa9059cbb",
+    },
+  },
+};
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 export function truncateId(id: string, chars = 8): string {
