@@ -1,7 +1,6 @@
 # Hardhat
 node_modules
 cache
-artifacts
 typechain-types
 coverage
 coverage.json
@@ -12,8 +11,7 @@ coverage.json
 .env.*.local
 
 # Deployment artifacts
-deployments/
-abis/
+
 
 # Logs
 *.log

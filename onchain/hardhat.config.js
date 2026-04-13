@@ -1,3 +1,4 @@
+require("dotenv").config();
 require("@nomicfoundation/hardhat-toolbox");
 require("@nomicfoundation/hardhat-ethers");
 
@@ -14,12 +15,12 @@ module.exports = {
   },
   networks: {
     hardhat: {
-      chainId: 31337
+      chainId: 2368
     },
     kiteTestnet: {
       url: process.env.KITE_RPC_URL || "https://rpc-testnet.gokite.ai/",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
-      chainId: 1337, // Update if Kite testnet uses different chainId
+      chainId: 2368, // Update if Kite testnet uses different chainId
       gasPrice: "auto"
     }
   },
@@ -30,7 +31,7 @@ module.exports = {
     customChains: [
       {
         network: "kiteTestnet",
-        chainId: 1337,
+        chainId: 2368,
         urls: {
           apiURL: "https://testnet.kitescan.ai/api",
           browserURL: "https://testnet.kitescan.ai"

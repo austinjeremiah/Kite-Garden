@@ -5,7 +5,15 @@ const path = require("path");
 async function main() {
   console.log("🚀 Starting AttractorGuard deployment to Kite AI testnet...\n");
 
-  const [deployer] = await hre.ethers.getSigners();
+  const signers = await hre.ethers.getSigners();
+  if (signers.length === 0) {
+    throw new Error(
+      "❌ No signers available! Please set the PRIVATE_KEY environment variable.\n" +
+      "Example: set PRIVATE_KEY=0x... (on Windows) or export PRIVATE_KEY=0x... (on Unix)"
+    );
+  }
+
+  const [deployer] = signers;
   console.log("Deploying contracts with account:", deployer.address);
   
   const balance = await hre.ethers.provider.getBalance(deployer.address);
@@ -29,8 +37,15 @@ async function main() {
 
   // Wait for a few block confirmations
   console.log("\n⏳ Waiting for block confirmations...");
-  await attractorGuard.deploymentTransaction().wait(3);
-  await simulator.deploymentTransaction().wait(3);
+  const attractorTx = attractorGuard.deploymentTransaction();
+  const simulatorTx = simulator.deploymentTransaction();
+  
+  if (attractorTx) {
+    await attractorTx.wait(3);
+  }
+  if (simulatorTx) {
+    await simulatorTx.wait(3);
+  }
   console.log("✅ Confirmations received");
 
   // Save deployment info
@@ -42,11 +57,11 @@ async function main() {
     contracts: {
       AttractorGuard: {
         address: attractorGuardAddress,
-        transactionHash: attractorGuard.deploymentTransaction().hash
+        transactionHash: attractorGuard.deploymentTransaction()?.hash || "N/A"
       },
       AgentPaymentSimulator: {
         address: simulatorAddress,
-        transactionHash: simulator.deploymentTransaction().hash
+        transactionHash: simulator.deploymentTransaction()?.hash || "N/A"
       }
     }
   };
