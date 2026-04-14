@@ -9,17 +9,44 @@ import {
   ReferenceLine, ResponsiveContainer, CartesianGrid,
 } from "recharts";
 import {
-  MOCK_AGENT_DETAILS,
-  MOCK_AGENTS,
-  type AgentDetail,
-  truncateId,
-  getStatusColor,
-} from "@/lib/mock-data";
+  fetchAgent,
+  fetchAgentDecisions,
+  fetchAgentPayments,
+  fromWei,
+  type GoldskyDecision,
+  type GoldskyPayment,
+} from "@/lib/goldsky";
+import { explorerTx, explorerAddress, KITE_EXPLORER } from "@/lib/config";
+import { truncateId } from "@/lib/mock-data";
 
-// ─── Fetcher (swap for real API) ──────────────────────────────────────────────
+// ─── Person 2 mock — session key (swap when backend ready) ───────────────────
+// Backend will provide: active session key address + expiry per agent
+function getMockSessionKey(status: string) {
+  if (status !== "active") return null;
+  return {
+    address: "0xA3f2...9c14",
+    valueLimit: "50.00",
+    functionSelector: "0xa9059cbb",
+    expiresAt: new Date(Date.now() + 38_000).toISOString(),
+  };
+}
 
-async function fetchAgentDetail(agentId: string): Promise<AgentDetail | null> {
-  return MOCK_AGENT_DETAILS[agentId] ?? null;
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function computeStdDev(values: number[]): number {
+  if (values.length < 2) return 0;
+  const mean = values.reduce((a, b) => a + b, 0) / values.length;
+  const variance = values.reduce((a, v) => a + (v - mean) ** 2, 0) / values.length;
+  return Math.sqrt(variance);
+}
+
+function deriveStatus(
+  isRevoked: boolean,
+  lastDecision: GoldskyDecision | undefined
+): "active" | "frozen" | "revoked" {
+  if (isRevoked) return "revoked";
+  if (lastDecision && !lastDecision.issued) return "frozen";
+  return "active";
 }
 
 // ─── Session key countdown ────────────────────────────────────────────────────
@@ -65,16 +92,20 @@ function MetricChart({ data, mean, stdDev, label }: {
   stdDev: number;
   label: string;
 }) {
-  const ceiling = parseFloat((mean + stdDev * 2).toFixed(3));
-  const floor = parseFloat((mean - stdDev * 2).toFixed(3));
+  const ceiling = parseFloat((mean + stdDev * 2).toFixed(4));
+  const floor   = parseFloat((mean - stdDev * 2).toFixed(4));
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <span className="text-xs font-mono font-bold text-white/50 uppercase tracking-widest">{label}</span>
         <div className="flex items-center gap-4 text-[10px] font-mono text-white/30">
-          <span className="flex items-center gap-1"><span className="inline-block w-4 h-px bg-white/40" /> baseline {mean.toFixed(3)}</span>
-          <span className="flex items-center gap-1"><span className="inline-block w-4 h-px bg-red-500/70" /> threshold {ceiling.toFixed(3)}</span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-4 h-px bg-white/40" /> baseline {mean.toFixed(4)}
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-4 h-px bg-red-500/70" /> ±2σ {ceiling.toFixed(4)}
+          </span>
         </div>
       </div>
       <ResponsiveContainer width="100%" height={160}>
@@ -86,7 +117,7 @@ function MetricChart({ data, mean, stdDev, label }: {
             contentStyle={{ background: "#000", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 0, fontFamily: "monospace", fontSize: 11 }}
             labelStyle={{ color: "rgba(255,255,255,0.4)" }}
             itemStyle={{ color: "#fff" }}
-            formatter={(v: number) => [v.toFixed(4), label]}
+            formatter={(v: number) => [v.toFixed(5), label]}
           />
           <ReferenceLine y={mean}    stroke="rgba(255,255,255,0.3)" strokeDasharray="4 4" />
           <ReferenceLine y={ceiling} stroke="rgba(239,68,68,0.6)"   strokeDasharray="4 4" />
@@ -133,14 +164,29 @@ function AmountChart({ data }: { data: { index: number; amount: number }[] }) {
 export default function AgentDetailPage() {
   const { agentId } = useParams<{ agentId: string }>();
   const router = useRouter();
+  const decoded = decodeURIComponent(agentId);
 
-  const { data: detail, isLoading } = useQuery({
-    queryKey: ["agent", agentId],
-    queryFn: () => fetchAgentDetail(agentId),
+  const { data: agent, isLoading: agentLoading } = useQuery({
+    queryKey: ["agent", decoded],
+    queryFn: () => fetchAgent(decoded),
     refetchInterval: 10_000,
   });
 
-  if (isLoading) {
+  const { data: decisions = [] } = useQuery({
+    queryKey: ["agentDecisions", decoded],
+    queryFn: () => fetchAgentDecisions(decoded),
+    refetchInterval: 10_000,
+    enabled: !!agent,
+  });
+
+  const { data: payments = [] } = useQuery({
+    queryKey: ["agentPayments", decoded],
+    queryFn: () => fetchAgentPayments(decoded),
+    refetchInterval: 10_000,
+    enabled: !!agent,
+  });
+
+  if (agentLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <span className="font-mono text-white/30 text-sm animate-pulse">Loading agent...</span>
@@ -148,21 +194,89 @@ export default function AgentDetailPage() {
     );
   }
 
-  if (!detail) {
+  if (!agent) {
     return (
       <div className="flex flex-col items-center justify-center h-screen gap-4">
         <span className="font-mono text-white/40 text-sm">Agent not found</span>
-        <button onClick={() => router.push("/dashboard")} className="font-mono text-xs text-white/30 hover:text-white underline">
+        <button
+          onClick={() => router.push("/dashboard")}
+          className="font-mono text-xs text-white/30 hover:text-white underline"
+        >
           ← Back to dashboard
         </button>
       </div>
     );
   }
 
-  const { agent, metricHistory, txHistory, sessionKey, freezeReason } = detail;
-  const ceiling = parseFloat((agent.baselineMean + agent.baselineStdDev * 2).toFixed(3));
-  const metricLabel = agent.mode === "mature" ? "D₂ corr_dim" : "SampEn";
-  const amountData = txHistory.map((tx, i) => ({ index: i, amount: tx.amount }));
+  // ── Derive view model from Goldsky data ──────────────────────────────────
+  // decisions come back ASC by timestamp (last = most recent)
+  const sortedDecisions = [...decisions].sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
+  const lastDecision = sortedDecisions[sortedDecisions.length - 1];
+
+  const status = deriveStatus(agent.isRevoked, lastDecision);
+
+  // Metric history for chart
+  const metricHistory = sortedDecisions.map((d, i) => ({
+    index: i,
+    value: fromWei(d.metricValue),
+  }));
+
+  // Baseline: use baselineValue from last decision, fall back to mean of metricValues
+  const metricValues = sortedDecisions.map((d) => fromWei(d.metricValue));
+  const baselineMean = lastDecision
+    ? fromWei(lastDecision.baselineValue)
+    : metricValues.length > 0
+    ? metricValues.reduce((a, b) => a + b, 0) / metricValues.length
+    : 0;
+
+  const baselineStdDev = computeStdDev(metricValues);
+  const currentMetric = lastDecision ? fromWei(lastDecision.metricValue) : null;
+  const deviationPct = currentMetric != null && baselineMean !== 0
+    ? ((currentMetric - baselineMean) / baselineMean) * 100
+    : 0;
+
+  // Mode based on tx count
+  const txCount = Number(agent.transactionCount);
+  const mode = txCount >= 200 ? "mature" : "early";
+  const metricLabel = mode === "mature" ? "D₂ corr_dim" : "SampEn";
+
+  // Amount data for chart (payments come back DESC, reverse for chart)
+  const sortedPayments = [...payments].sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
+  const amountData = sortedPayments.map((p, i) => ({
+    index: i,
+    amount: Number(p.amount) / 1e6,
+  }));
+
+  // Tx table: cross-reference payments with decisions
+  const decisionByTxHash = new Map(decisions.map((d) => [d.transactionHash, d]));
+  const txRows = sortedPayments.map((p, i) => {
+    const dec = decisionByTxHash.get(p.transactionHash);
+    const verdict: "ISSUED" | "DENIED" | "ATTACK" | "SEEDED" =
+      p.paymentType === "ATTACK" ? "ATTACK"
+      : p.paymentType === "SEEDED" ? "SEEDED"
+      : dec ? (dec.issued ? "ISSUED" : "DENIED")
+      : "ISSUED";
+    const prevTs = i > 0 ? Number(sortedPayments[i - 1].timestamp) : null;
+    const timeDelta = prevTs ? Number(p.timestamp) - prevTs : 0;
+    return {
+      id: p.id,
+      blockNumber: Number(p.blockNumber),
+      amount: Number(p.amount) / 1e6,
+      to: p.to,
+      timeDelta,
+      verdict,
+      txHash: p.transactionHash,
+    };
+  }).reverse(); // show newest first
+
+  // Freeze event from last denied decision
+  const freezeDecision = status === "frozen" ? lastDecision : null;
+
+  // Session key — mock until Person 2 ready
+  const sessionKey = getMockSessionKey(status);
+
+  // Ceiling for display
+  const ceiling = baselineMean + baselineStdDev * 2;
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -175,18 +289,22 @@ export default function AgentDetailPage() {
           <ArrowLeft className="w-4 h-4" /> Dashboard
         </button>
         <span className="text-white/20">/</span>
-        <span className="font-mono text-white text-sm font-bold">{agent.name}</span>
+        <span className="font-mono text-white text-sm font-bold">
+          {agent.name ?? truncateId(agent.id, 8)}
+        </span>
 
         {/* Status badge */}
         <span className={`ml-auto inline-flex items-center gap-1.5 text-[11px] font-mono font-bold px-3 py-1 border ${
-          agent.status === "active"
+          status === "active"
             ? "border-green-500/50 text-green-400 bg-green-500/10"
-            : agent.status === "frozen"
+            : status === "frozen"
             ? "border-red-500/50 text-red-400 bg-red-500/10"
             : "border-white/20 text-white/40"
         }`}>
-          <span className={`w-1.5 h-1.5 rounded-full ${getStatusColor(agent.status)}`} />
-          {agent.status.toUpperCase()}
+          <span className={`w-1.5 h-1.5 rounded-full ${
+            status === "active" ? "bg-green-500" : status === "frozen" ? "bg-red-500" : "bg-white/20"
+          }`} />
+          {status.toUpperCase()}
         </span>
       </div>
 
@@ -196,43 +314,60 @@ export default function AgentDetailPage() {
         <div className="border border-white/25 bg-black/40 backdrop-blur-sm p-6 grid grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-widest">Agent ID</span>
-            <span className="font-mono text-xs text-white/70 break-all">{truncateId(agent.agentId, 10)}</span>
+            <span className="font-mono text-xs text-white/70 break-all">{truncateId(agent.id, 10)}</span>
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-widest">Owner</span>
-            <span className="font-mono text-xs text-white/70">{agent.ownerAddress}</span>
+            <a
+              href={explorerAddress(agent.owner)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-xs text-[#eca8d6]/70 hover:text-[#eca8d6] flex items-center gap-1 transition-colors truncate"
+            >
+              {truncateId(agent.owner, 8)} <ExternalLink className="w-3 h-3 shrink-0" />
+            </a>
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-widest">Mode</span>
             <span className="font-mono text-xs text-white/70">
-              {agent.mode === "mature" ? `mature · corr_dim (${agent.transactionCount} tx)` : `early · sampen (${agent.transactionCount} tx)`}
+              {mode === "mature"
+                ? `mature · corr_dim (${txCount} tx)`
+                : `early · sampen (${txCount} tx)`}
             </span>
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-widest">Baseline hash</span>
-            <a
-              href="https://testnet.kitescan.ai"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-mono text-xs text-[#eca8d6] hover:text-[#eca8d6]/80 flex items-center gap-1 transition-colors"
-            >
-              {agent.baselineHash} <ExternalLink className="w-3 h-3" />
-            </a>
+            <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-widest">Last decision</span>
+            {lastDecision ? (
+              <a
+                href={explorerTx(lastDecision.transactionHash)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-xs text-[#eca8d6]/70 hover:text-[#eca8d6] flex items-center gap-1 transition-colors"
+              >
+                {truncateId(lastDecision.transactionHash, 8)} <ExternalLink className="w-3 h-3 shrink-0" />
+              </a>
+            ) : (
+              <span className="font-mono text-xs text-white/30">No decisions yet</span>
+            )}
           </div>
         </div>
 
         {/* Freeze alert */}
-        {agent.status === "frozen" && freezeReason && (
+        {status === "frozen" && freezeDecision && (
           <div className="border border-red-500/40 bg-red-500/10 p-5 flex items-start gap-4">
             <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <p className="font-mono font-bold text-red-400 text-sm mb-1">Agent frozen — behavioral anomaly detected</p>
               <p className="font-mono text-xs text-white/50">
-                Metric <span className="text-red-400 font-bold">{freezeReason.metricValue}</span> exceeded threshold <span className="text-white/70">{freezeReason.threshold}</span> at {new Date(freezeReason.timestamp).toLocaleTimeString()}
+                Metric{" "}
+                <span className="text-red-400 font-bold">{fromWei(freezeDecision.metricValue).toFixed(5)}</span>
+                {" "}exceeded threshold{" "}
+                <span className="text-white/70">{ceiling.toFixed(5)}</span>
+                {" "}at {new Date(Number(freezeDecision.timestamp) * 1000).toLocaleTimeString()}
               </p>
             </div>
             <a
-              href={freezeReason.explorerLink}
+              href={explorerTx(freezeDecision.transactionHash)}
               target="_blank"
               rel="noopener noreferrer"
               className="font-mono text-[10px] text-red-400/70 hover:text-red-400 flex items-center gap-1 shrink-0"
@@ -253,30 +388,31 @@ export default function AgentDetailPage() {
               <div className="flex flex-col gap-1">
                 <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-widest">{metricLabel}</span>
                 <span className={`text-5xl font-mono font-bold tabular-nums ${
-                  agent.status === "frozen" ? "text-red-400" :
-                  Math.abs(agent.deviationPct) < 20 ? "text-green-400" : "text-amber-400"
+                  currentMetric == null ? "text-white/20" :
+                  status === "frozen" ? "text-red-400" :
+                  Math.abs(deviationPct) < 20 ? "text-green-400" : "text-amber-400"
                 }`}>
-                  {agent.currentMetric.toFixed(3)}
+                  {currentMetric != null ? currentMetric.toFixed(4) : "—"}
                 </span>
               </div>
               <div className="flex flex-col gap-2 mt-1">
                 <div className="flex items-center gap-3 text-xs font-mono">
                   <span className="text-white/40">baseline</span>
-                  <span className="text-white/70 font-semibold">{agent.baselineMean.toFixed(3)}</span>
+                  <span className="text-white/70 font-semibold">{baselineMean.toFixed(4)}</span>
                 </div>
                 <div className="flex items-center gap-3 text-xs font-mono">
                   <span className="text-white/40">±2σ range</span>
                   <span className="text-white/70 font-semibold">
-                    {(agent.baselineMean - agent.baselineStdDev * 2).toFixed(3)} – {ceiling.toFixed(3)}
+                    {(baselineMean - baselineStdDev * 2).toFixed(4)} – {ceiling.toFixed(4)}
                   </span>
                 </div>
                 <div className="flex items-center gap-3 text-xs font-mono">
                   <span className="text-white/40">deviation</span>
                   <span className={`font-bold ${
-                    Math.abs(agent.deviationPct) < 20 ? "text-green-400" :
-                    Math.abs(agent.deviationPct) < 50 ? "text-amber-400" : "text-red-400"
+                    Math.abs(deviationPct) < 20 ? "text-green-400" :
+                    Math.abs(deviationPct) < 50 ? "text-amber-400" : "text-red-400"
                   }`}>
-                    {agent.deviationPct > 0 ? "+" : ""}{agent.deviationPct.toFixed(1)}%
+                    {deviationPct > 0 ? "+" : ""}{deviationPct.toFixed(1)}%
                   </span>
                 </div>
               </div>
@@ -284,26 +420,55 @@ export default function AgentDetailPage() {
 
             {/* Metric chart */}
             <div className="border border-white/25 bg-black/40 backdrop-blur-sm p-6">
-              <MetricChart
-                data={metricHistory}
-                mean={agent.baselineMean}
-                stdDev={agent.baselineStdDev}
-                label={metricLabel}
-              />
+              {metricHistory.length > 0 ? (
+                <MetricChart
+                  data={metricHistory}
+                  mean={baselineMean}
+                  stdDev={baselineStdDev}
+                  label={metricLabel}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-[160px]">
+                  <span className="font-mono text-xs text-white/25 animate-pulse">Waiting for gate decisions...</span>
+                </div>
+              )}
             </div>
 
             {/* Amount chart */}
             <div className="border border-white/25 bg-black/40 backdrop-blur-sm p-6">
-              <AmountChart data={amountData} />
+              {amountData.length > 0 ? (
+                <AmountChart data={amountData} />
+              ) : (
+                <div className="flex items-center justify-center h-[100px]">
+                  <span className="font-mono text-xs text-white/25 animate-pulse">Waiting for payments...</span>
+                </div>
+              )}
             </div>
           </div>
 
           {/* RIGHT — tx table + session key */}
           <div className="flex flex-col gap-4">
 
+            {/* Stats row */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: "Sessions issued", value: Number(agent.sessionsIssued), color: "text-green-400" },
+                { label: "Sessions denied", value: Number(agent.sessionsDenied), color: "text-red-400" },
+                { label: "Attacks detected", value: Number(agent.attacksDetected), color: "text-amber-400" },
+              ].map((s) => (
+                <div key={s.label} className="border border-white/25 bg-black/40 backdrop-blur-sm p-4 flex flex-col gap-1">
+                  <span className="text-[9px] font-mono font-bold text-white/40 uppercase tracking-widest leading-tight">{s.label}</span>
+                  <span className={`font-mono font-bold text-2xl tabular-nums ${s.color}`}>{s.value}</span>
+                </div>
+              ))}
+            </div>
+
             {/* Session key panel */}
             <div className="border border-white/25 bg-black/40 backdrop-blur-sm p-6 flex flex-col gap-4">
-              <span className="text-[10px] font-mono font-bold text-white/50 uppercase tracking-widest">Session key</span>
+              <span className="text-[10px] font-mono font-bold text-white/50 uppercase tracking-widest">
+                Session key
+                <span className="ml-2 text-white/20 normal-case font-normal">(mock — Person 2 pending)</span>
+              </span>
 
               {sessionKey ? (
                 <>
@@ -335,7 +500,7 @@ export default function AgentDetailPage() {
             </div>
 
             {/* Re-authorize panel — only when frozen */}
-            {agent.status === "frozen" && (
+            {status === "frozen" && (
               <div className="border border-red-500/30 bg-red-500/5 p-5 flex flex-col gap-4">
                 <span className="text-[10px] font-mono font-bold text-red-400/70 uppercase tracking-widest">Human review required</span>
                 <p className="font-mono text-xs text-white/50 leading-relaxed">
@@ -359,21 +524,34 @@ export default function AgentDetailPage() {
                 <span className="text-[10px] font-mono font-bold text-white/50 uppercase tracking-widest">Δt</span>
                 <span className="text-[10px] font-mono font-bold text-white/50 uppercase tracking-widest">Verdict</span>
               </div>
-              <div className="overflow-y-auto divide-y divide-white/10 flex-1 max-h-[420px]">
-                {txHistory.map((tx) => (
-                  <div key={tx.id} className="px-5 py-2.5 grid grid-cols-[70px_60px_70px_50px_70px] gap-2 items-center">
-                    <span className="font-mono text-[10px] text-white/40 tabular-nums">{tx.blockNumber.toLocaleString()}</span>
-                    <span className="font-mono text-xs font-semibold text-white/80 tabular-nums">{tx.amount.toFixed(2)}</span>
-                    <span className="font-mono text-[10px] text-white/40 truncate">{tx.counterparty}</span>
-                    <span className="font-mono text-[10px] text-white/40 tabular-nums">{tx.timeDelta}s</span>
-                    <span className={`font-mono text-[10px] font-bold ${
-                      tx.verdict === "ISSUED" ? "text-green-400" :
-                      tx.verdict === "DENIED" ? "text-red-400" : "text-amber-400"
-                    }`}>
-                      {tx.verdict}
-                    </span>
+              <div className="overflow-y-auto divide-y divide-white/10 flex-1 max-h-[400px]">
+                {txRows.length === 0 ? (
+                  <div className="flex items-center justify-center h-20">
+                    <span className="font-mono text-xs text-white/25 animate-pulse">No transactions yet...</span>
                   </div>
-                ))}
+                ) : (
+                  txRows.map((tx) => (
+                    <a
+                      key={tx.id}
+                      href={explorerTx(tx.txHash)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-5 py-2.5 grid grid-cols-[70px_60px_70px_50px_70px] gap-2 items-center hover:bg-white/[0.03] transition-colors"
+                    >
+                      <span className="font-mono text-[10px] text-white/40 tabular-nums">{tx.blockNumber.toLocaleString()}</span>
+                      <span className="font-mono text-xs font-semibold text-white/80 tabular-nums">{tx.amount.toFixed(2)}</span>
+                      <span className="font-mono text-[10px] text-white/40 truncate">{truncateId(tx.to, 4)}</span>
+                      <span className="font-mono text-[10px] text-white/40 tabular-nums">{tx.timeDelta}s</span>
+                      <span className={`font-mono text-[10px] font-bold ${
+                        tx.verdict === "ISSUED"  ? "text-green-400" :
+                        tx.verdict === "DENIED"  ? "text-red-400"   :
+                        tx.verdict === "ATTACK"  ? "text-amber-400" : "text-white/30"
+                      }`}>
+                        {tx.verdict}
+                      </span>
+                    </a>
+                  ))
+                )}
               </div>
             </div>
           </div>
