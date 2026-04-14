@@ -1,0 +1,16 @@
+{
+  "network": "kiteTestnet",
+  "chainId": "2368",
+  "deployer": "0xe01Add0c3640a8314132bAF491d101A38ffEF4f0",
+  "timestamp": "2026-04-14T05:00:50.301Z",
+  "contracts": {
+    "AttractorGuard": {
+      "address": "0x6A2ebB47CedF77f548aDc8125d54DA6d7F83b268",
+      "transactionHash": "0xe62af6584461fa8e0a0068d112c91da255e7e2632a91111f2f61bf3e1b752728"
+    },
+    "AgentPaymentSimulator": {
+      "address": "0x96dB52f6d948ab96D1919b996c10C95F4dB3d3Ec",
+      "transactionHash": "0xeddd519872bd0da4d613be519a4b96d974f973e42f741f362828e849c6d12ef5"
+    }
+  }
+}

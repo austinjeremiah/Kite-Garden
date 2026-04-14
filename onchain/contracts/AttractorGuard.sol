@@ -37,6 +37,13 @@ contract AttractorGuard {
         uint256 blockNumber;
     }
     
+    struct BaselineRecord {
+        uint256 baselineValue;      // The baseline metric value
+        uint256 timestamp;          // When baseline was set
+        bool isActive;              // Is this the current baseline
+        string reason;              // Why baseline was changed
+    }
+    
     // Mapping from agent DID to Agent struct
     mapping(bytes32 => Agent) public agents;
     
@@ -57,6 +64,17 @@ contract AttractorGuard {
     
     // Total decisions logged
     uint256 public totalDecisions;
+    
+    // ============ NEW: Baseline History & Metadata ============
+    
+    mapping(bytes32 => string) public agentNames;
+    mapping(bytes32 => string) public agentDescriptions;
+    mapping(bytes32 => BaselineRecord[]) public baselineHistory;
+    mapping(bytes32 => uint256) public currentBaselineIndex;
+    mapping(bytes32 => uint256) public freezeCount;
+    mapping(bytes32 => uint256) public lastFreezeTime;
+    mapping(bytes32 => uint256) public decisionsApproved;
+    mapping(bytes32 => uint256) public denialCount;
     
     // ============ Events ============
     
@@ -111,6 +129,34 @@ contract AttractorGuard {
     event OwnershipTransferred(
         address indexed previousOwner,
         address indexed newOwner
+    );
+    
+    event BaselineHistoryRecorded(
+        bytes32 indexed agentDID,
+        uint256 baselineValue,
+        string reason,
+        uint256 timestamp
+    );
+    
+    event AgentFrozen(
+        bytes32 indexed agentDID,
+        uint256 freezeCount,
+        string reason,
+        uint256 timestamp
+    );
+    
+    event AgentReauthorized(
+        bytes32 indexed agentDID,
+        uint256 newBaselineValue,
+        string reason,
+        uint256 timestamp
+    );
+    
+    event AgentMetadataUpdated(
+        bytes32 indexed agentDID,
+        string name,
+        string description,
+        uint256 timestamp
     );
     
     // ============ Modifiers ============
@@ -226,6 +272,64 @@ contract AttractorGuard {
                 block.timestamp
             );
         } else {
+            emit SessionKeyDenied(
+                agentDID,
+                amount,
+                metricValue,
+                baselineValue,
+                block.timestamp
+            );
+        }
+        
+        return decisionIndex;
+    }
+    
+    /**
+     * @notice Log decision with automatic statistics tracking
+     */
+    function logDecisionWithStats(
+        bytes32 agentDID,
+        bool issued,
+        uint256 metricValue,
+        uint256 baselineValue,
+        uint256 amount,
+        address sessionKey
+    ) external onlyAuthorizedBackend agentExists(agentDID) agentNotRevoked(agentDID) returns (uint256) {
+        
+        Agent storage agent = agents[agentDID];
+        agent.transactionCount++;
+        agent.lastActivityAt = block.timestamp;
+        
+        GateDecision memory decision = GateDecision({
+            agentDID: agentDID,
+            issued: issued,
+            metricValue: metricValue,
+            baselineValue: baselineValue,
+            amount: amount,
+            sessionKey: sessionKey,
+            timestamp: block.timestamp,
+            blockNumber: block.number
+        });
+        
+        uint256 decisionIndex = decisions.length;
+        decisions.push(decision);
+        agentDecisions[agentDID].push(decisionIndex);
+        
+        totalDecisions++;
+        
+        // Track statistics
+        if (issued) {
+            decisionsApproved[agentDID]++;
+            emit SessionKeyIssued(
+                agentDID,
+                sessionKey,
+                amount,
+                metricValue,
+                baselineValue,
+                block.timestamp
+            );
+        } else {
+            denialCount[agentDID]++;
             emit SessionKeyDenied(
                 agentDID,
                 amount,
@@ -440,4 +544,185 @@ contract AttractorGuard {
         
         return true;
     }
+    
+    // ============ NEW: Enhanced Functions ============
+    
+    /**
+     * @notice Register agent with metadata and initial baseline
+     */
+    function registerAgentWithMetadata(
+        bytes32 agentDID,
+        string calldata name,
+        string calldata description,
+        uint256 spendingLimit,
+        uint256 thresholdMultiplier,
+        uint256 initialBaseline
+    ) external returns (bool) {
+        require(agents[agentDID].owner == address(0), "Agent already registered");
+        require(spendingLimit > 0, "Spending limit must be > 0");
+        require(thresholdMultiplier >= 100 && thresholdMultiplier <= 500, "Threshold must be between 1.0 and 5.0");
+        
+        agents[agentDID] = Agent({
+            owner: msg.sender,
+            spendingLimit: spendingLimit,
+            thresholdMultiplier: thresholdMultiplier,
+            transactionCount: 0,
+            isActive: true,
+            isRevoked: false,
+            registeredAt: block.timestamp,
+            lastActivityAt: block.timestamp
+        });
+        
+        totalAgents++;
+        
+        agentNames[agentDID] = name;
+        agentDescriptions[agentDID] = description;
+        freezeCount[agentDID] = 0;
+        lastFreezeTime[agentDID] = 0;
+        decisionsApproved[agentDID] = 0;
+        denialCount[agentDID] = 0;
+        
+        _recordBaseline(agentDID, initialBaseline, "initial");
+        
+        emit AgentRegistered(agentDID, msg.sender, spendingLimit, block.timestamp);
+        emit AgentMetadataUpdated(agentDID, name, description, block.timestamp);
+        
+        return true;
+    }
+    
+    /**
+     * @notice Internal: Record baseline and maintain history
+     */
+    function _recordBaseline(
+        bytes32 agentDID,
+        uint256 baselineValue,
+        string memory reason
+    ) internal {
+        if (currentBaselineIndex[agentDID] < baselineHistory[agentDID].length) {
+            baselineHistory[agentDID][currentBaselineIndex[agentDID]].isActive = false;
+        }
+        
+        BaselineRecord memory record = BaselineRecord({
+            baselineValue: baselineValue,
+            timestamp: block.timestamp,
+            isActive: true,
+            reason: reason
+        });
+        
+        baselineHistory[agentDID].push(record);
+        currentBaselineIndex[agentDID] = baselineHistory[agentDID].length - 1;
+        
+        emit BaselineHistoryRecorded(agentDID, baselineValue, reason, block.timestamp);
+    }
+    
+    /**
+     * @notice Reset baseline with reason
+     */
+    function resetBaselineWithReason(
+        bytes32 agentDID,
+        uint256 newBaseline,
+        string calldata reason
+    ) external agentExists(agentDID) agentNotRevoked(agentDID) returns (bool) {
+        Agent storage agent = agents[agentDID];
+        require(msg.sender == agent.owner, "Only agent owner");
+        require(newBaseline > 0, "Baseline must be > 0");
+        
+        _recordBaseline(agentDID, newBaseline, reason);
+        
+        emit BaselineReset(agentDID, newBaseline, block.timestamp);
+        
+        return true;
+    }
+    
+    /**
+     * @notice Freeze agent with reason
+     */
+    function freezeAgentWithReason(
+        bytes32 agentDID,
+        string calldata reason
+    ) external agentExists(agentDID) returns (bool) {
+        Agent storage agent = agents[agentDID];
+        require(msg.sender == agent.owner || authorizedBackends[msg.sender], "Not authorized");
+        require(agent.isActive, "Agent not active");
+        
+        agent.isActive = false;
+        freezeCount[agentDID]++;
+        lastFreezeTime[agentDID] = block.timestamp;
+        
+        emit AgentFrozen(agentDID, freezeCount[agentDID], reason, block.timestamp);
+        
+        return true;
+    }
+    
+    /**
+     * @notice Reauthorize frozen agent with new baseline
+     */
+    function reauthorizeAgent(
+        bytes32 agentDID,
+        uint256 newBaseline,
+        string calldata recoveryReason
+    ) external agentExists(agentDID) agentNotRevoked(agentDID) returns (bool) {
+        Agent storage agent = agents[agentDID];
+        require(msg.sender == agent.owner, "Only agent owner");
+        require(!agent.isActive, "Agent already active");
+        
+        agent.isActive = true;
+        _recordBaseline(agentDID, newBaseline, recoveryReason);
+        
+        emit AgentReauthorized(agentDID, newBaseline, recoveryReason, block.timestamp);
+        
+        return true;
+    }
+    
+    /**
+     * @notice Get baseline history for an agent
+     */
+    function getBaselineHistory(bytes32 agentDID)
+        external
+        view
+        returns (BaselineRecord[] memory)
+    {
+        return baselineHistory[agentDID];
+    }
+    
+    /**
+     * @notice Get current active baseline
+     */
+    function getCurrentBaseline(bytes32 agentDID)
+        external
+        view
+        returns (uint256 value, uint256 timestamp, string memory reason)
+    {
+        uint256 idx = currentBaselineIndex[agentDID];
+        if (baselineHistory[agentDID].length > idx) {
+            BaselineRecord memory record = baselineHistory[agentDID][idx];
+            return (record.baselineValue, record.timestamp, record.reason);
+        }
+        return (0, 0, "");
+    }
+    
+    /**
+     * @notice Get agent statistics
+     */
+    function getAgentStats(bytes32 agentDID)
+        external
+        view
+        returns (
+            uint256 approvalsCount,
+            uint256 denialCounts,
+            uint256 freezeCounts,
+            string memory name,
+            string memory description
+        )
+    {
+        return (
+            decisionsApproved[agentDID],
+            denialCount[agentDID],
+            freezeCount[agentDID],
+            agentNames[agentDID],
+            agentDescriptions[agentDID]
+        );
+    }
 }
+    
+

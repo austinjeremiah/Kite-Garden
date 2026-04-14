@@ -10,6 +10,7 @@
     "deploy": "hardhat run scripts/deploy.js --network kiteTestnet",
     "deploy:local": "hardhat run scripts/deploy.js --network hardhat",
     "seed": "hardhat run scripts/seed.js --network kiteTestnet",
+    "register-with-metadata": "hardhat run scripts/register-agent-with-metadata.js --network kiteTestnet",
     "verify": "hardhat verify --network kiteTestnet",
     "clean": "hardhat clean",
     "node": "hardhat node"

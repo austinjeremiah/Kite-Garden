@@ -9,9 +9,17 @@ type Agent @entity {
   registeredAt: BigInt!
   lastActivityAt: BigInt!
   
+  # Metadata (NEW - optional)
+  name: String
+  description: String
+  freezeCount: BigInt
+  lastFreezeTime: BigInt
+  
   # Relations
   payments: [AgentPayment!]! @derivedFrom(field: "agent")
   decisions: [GateDecision!]! @derivedFrom(field: "agent")
+  baselineRecords: [BaselineRecord!]! @derivedFrom(field: "agent")
+  freezeEvents: [AgentFreezeEvent!]! @derivedFrom(field: "agent")
   
   # Aggregated stats
   totalPaid: BigInt!
@@ -111,4 +119,39 @@ type SystemStats @entity {
   totalAttacksDetected: BigInt!
   lastUpdateTimestamp: BigInt!
   lastUpdateBlock: BigInt!
+}
+
+# ============ NEW: Enhanced Baseline & Freeze Tracking ============
+
+type BaselineRecord @entity {
+  id: ID! # agentDID + recordIndex
+  agent: Agent!
+  agentDID: Bytes!
+  baselineValue: BigInt!
+  timestamp: BigInt!
+  isActive: Boolean!
+  reason: String!
+  blockNumber: BigInt!
+}
+
+type AgentFreezeEvent @entity {
+  id: ID! # transaction hash + log index
+  agent: Agent!
+  agentDID: Bytes!
+  freezeCount: BigInt!
+  reason: String!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type AgentReauthorizationEvent @entity {
+  id: ID! # transaction hash + log index
+  agent: Agent!
+  agentDID: Bytes!
+  newBaselineValue: BigInt!
+  reason: String!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
 }

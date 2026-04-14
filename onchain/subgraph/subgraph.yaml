@@ -8,9 +8,9 @@ dataSources:
     name: AttractorGuard
     network: kite-ai-testnet
     source:
-      address: "0x2B1A80A3CF8E690b7f69694fF100Bd5c85AF75DA"
+      address: "0x1F958d24298e04e8516EA972eFc2A3Bd50B4BF4F"
       abi: AttractorGuard
-      startBlock: 20857000
+      startBlock: 20859280
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -19,6 +19,9 @@ dataSources:
         - Agent
         - GateDecision
         - SessionKeyEvent
+        - BaselineRecord
+        - AgentFreezeEvent
+        - AgentReauthorizationEvent
       abis:
         - name: AttractorGuard
           file: ../abis/AttractorGuard.json
@@ -35,14 +38,22 @@ dataSources:
           handler: handleBaselineReset
         - event: AgentStatusChanged(indexed bytes32,bool,uint256)
           handler: handleAgentStatusChanged
+        - event: BaselineHistoryRecorded(indexed bytes32,uint256,string,uint256)
+          handler: handleBaselineHistoryRecorded
+        - event: AgentFrozen(indexed bytes32,uint256,string,uint256)
+          handler: handleAgentFrozen
+        - event: AgentReauthorized(indexed bytes32,uint256,string,uint256)
+          handler: handleAgentReauthorized
+        - event: AgentMetadataUpdated(indexed bytes32,string,string,uint256)
+          handler: handleAgentMetadataUpdated
       file: ./src/attractor-guard.ts
   - kind: ethereum
     name: AgentPaymentSimulator
     network: kite-ai-testnet
     source:
-      address: "0xA900eF9aB5907f178b6C562f044c896c42c31F7D"
+      address: "0x1634edA803e70dF6a674B2E67B6D0B11C0b4B9aC"
       abi: AgentPaymentSimulator
-      startBlock: 20857000
+      startBlock: 20859280
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7

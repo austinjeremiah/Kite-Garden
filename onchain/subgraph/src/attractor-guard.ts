@@ -5,7 +5,11 @@ import {
   SessionKeyDenied,
   AgentRevoked,
   BaselineReset,
-  AgentStatusChanged
+  AgentStatusChanged,
+  BaselineHistoryRecorded,
+  AgentFrozen,
+  AgentReauthorized,
+  AgentMetadataUpdated
 } from "../generated/AttractorGuard/AttractorGuard";
 import {
   Agent,
@@ -13,6 +17,9 @@ import {
   SessionKeyEvent,
   BaselineResetEvent,
   AgentStatusChangeEvent,
+  BaselineRecord,
+  AgentFreezeEvent,
+  AgentReauthorizationEvent,
   SystemStats
 } from "../generated/schema";
 
@@ -231,4 +238,102 @@ export function handleAgentStatusChanged(event: AgentStatusChanged): void {
   statusEvent.blockNumber = event.block.number;
   statusEvent.transactionHash = event.transaction.hash;
   statusEvent.save();
+}
+
+// ============ NEW EVENT HANDLERS ============
+
+export function handleBaselineHistoryRecorded(event: BaselineHistoryRecorded): void {
+  let agent = Agent.load(event.params.agentDID);
+  if (agent == null) {
+    return;
+  }
+  
+  agent.lastActivityAt = event.params.timestamp;
+  agent.save();
+  
+  // Create baseline record 
+  let recordId = event.params.agentDID.toHex() + "-" + event.logIndex.toString();
+  let record = new BaselineRecord(recordId);
+  record.agent = event.params.agentDID;
+  record.agentDID = event.params.agentDID;
+  record.baselineValue = event.params.baselineValue;
+  record.timestamp = event.params.timestamp;
+  record.isActive = true;
+  record.reason = event.params.reason;
+  record.blockNumber = event.block.number;
+  record.save();
+}
+
+export function handleAgentFrozen(event: AgentFrozen): void {
+  let agent = Agent.load(event.params.agentDID);
+  if (agent == null) {
+    return;
+  }
+  
+  agent.isActive = false;
+  agent.freezeCount = event.params.freezeCount;
+  agent.lastFreezeTime = event.block.timestamp;
+  agent.lastActivityAt = event.block.timestamp;
+  agent.save();
+  
+  // Create freeze event
+  let eventId = event.transaction.hash.toHex() + "-" + event.logIndex.toString();
+  let freezeEvent = new AgentFreezeEvent(eventId);
+  freezeEvent.agent = event.params.agentDID;
+  freezeEvent.agentDID = event.params.agentDID;
+  freezeEvent.freezeCount = event.params.freezeCount;
+  freezeEvent.reason = event.params.reason;
+  freezeEvent.timestamp = event.block.timestamp;
+  freezeEvent.blockNumber = event.block.number;
+  freezeEvent.transactionHash = event.transaction.hash;
+  freezeEvent.save();
+}
+
+export function handleAgentReauthorized(event: AgentReauthorized): void {
+  let agent = Agent.load(event.params.agentDID);
+  if (agent == null) {
+    return;
+  }
+  
+  agent.isActive = true;
+  agent.lastActivityAt = event.block.timestamp;
+  agent.save();
+  
+  // Record new baseline
+  let recordId = event.params.agentDID.toHex() + "-" + event.logIndex.toString();
+  let record = new BaselineRecord(recordId);
+  record.agent = event.params.agentDID;
+  record.agentDID = event.params.agentDID;
+  record.baselineValue = event.params.newBaselineValue;
+  record.timestamp = event.block.timestamp;
+  record.isActive = true;
+  record.reason = event.params.reason;
+  record.blockNumber = event.block.number;
+  record.save();
+  
+  // Create reauthorization event
+  let eventId = event.transaction.hash.toHex() + "-" + event.logIndex.toString();
+  let reAuthEvent = new AgentReauthorizationEvent(eventId);
+  reAuthEvent.agent = event.params.agentDID;
+  reAuthEvent.agentDID = event.params.agentDID;
+  reAuthEvent.newBaselineValue = event.params.newBaselineValue;
+  reAuthEvent.reason = event.params.reason;
+  reAuthEvent.timestamp = event.block.timestamp;
+  reAuthEvent.blockNumber = event.block.number;
+  reAuthEvent.transactionHash = event.transaction.hash;
+  reAuthEvent.save();
+}
+
+export function handleAgentMetadataUpdated(event: AgentMetadataUpdated): void {
+  let agent = Agent.load(event.params.agentDID);
+  if (agent == null) {
+    return;
+  }
+  
+  agent.name = event.params.name;
+  agent.description = event.params.description;
+  agent.freezeCount = BigInt.fromI32(0);
+  agent.lastFreezeTime = null;
+  agent.lastActivityAt = event.block.timestamp;
+  agent.save();
 }
