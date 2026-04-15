@@ -13,7 +13,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             loop
             playsInline
             aria-hidden="true"
-            className="w-full h-full object-cover object-center opacity-[0.90]"
+            className="w-full h-full object-cover object-center opacity-[0.40]"
           >
             <source src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/bg-hero-0BnFGdr81Ifnj3WbBZoNt1KE4D5DMT.mp4" type="video/mp4" />
           </video>

@@ -55,10 +55,10 @@ function Field({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between">
-        <label className="text-xs font-mono font-bold text-white/50 uppercase tracking-widest">
+        <label className="text-sm font-mono font-bold text-white/80 uppercase tracking-widest">
           {label}
         </label>
-        {hint && <span className="text-[10px] font-mono text-white/25">{hint}</span>}
+        {hint && <span className="text-xs font-mono text-white/40">{hint}</span>}
       </div>
       {children}
     </div>
@@ -66,7 +66,7 @@ function Field({
 }
 
 const inputCls =
-  "w-full bg-black/60 border border-white/25 px-4 py-3 font-mono text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-white/50 transition-colors";
+  "w-full bg-black/80 border border-white/40 px-4 py-3.5 font-mono text-base text-white placeholder:text-white/30 focus:outline-none focus:border-[#eca8d6]/60 transition-colors";
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -188,15 +188,15 @@ export default function RegisterPage() {
     <div className="flex flex-col min-h-screen">
       {/* Top bar */}
       <div className="px-8 py-5 border-b border-white/25 shrink-0">
-        <h1 className="font-mono font-bold text-white text-lg">Register Agent</h1>
-        <p className="font-mono text-white/40 text-xs mt-0.5">On-chain registration · Kite testnet</p>
+        <h1 className="font-mono font-bold text-white text-2xl">Register Agent</h1>
+        <p className="font-mono text-white/40 text-sm mt-0.5">On-chain registration · Kite testnet</p>
       </div>
 
       <div className="flex-1 flex items-start justify-center p-8">
         <div className="w-full max-w-xl flex flex-col gap-8">
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-6 border border-white/25 bg-black/70 backdrop-blur-sm p-8">
 
             {/* Name */}
             <Field label="Agent name" hint="human-readable identifier">
@@ -263,7 +263,7 @@ export default function RegisterPage() {
                   onChange={(e) => setThreshold(Number(e.target.value))}
                   className="w-full accent-[#eca8d6] cursor-pointer"
                 />
-                <div className="flex justify-between text-[10px] font-mono text-white/30">
+                <div className="flex justify-between text-xs font-mono text-white/50">
                   <span>Strict (±1σ)</span>
                   <span className="text-[#eca8d6] font-bold">{THRESHOLD_LABELS[threshold].label}</span>
                   <span>Lenient (±3σ)</span>
@@ -283,7 +283,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={!valid || state === "submitting"}
-              className="w-full border border-white/25 text-white font-mono font-bold text-sm py-4 hover:bg-white/5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full border border-white/40 text-white font-mono font-bold text-base py-4 hover:bg-white/5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {state === "submitting" ? (
                 <>
@@ -297,8 +297,8 @@ export default function RegisterPage() {
           </form>
 
           {/* Info box */}
-          <div className="border border-white/10 bg-white/[0.02] p-5 flex flex-col gap-3">
-            <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-widest">What happens on submit</span>
+          <div className="border border-white/25 bg-black/70 backdrop-blur-sm p-6 flex flex-col gap-4">
+            <span className="text-sm font-mono font-bold text-white/60 uppercase tracking-widest">What happens on submit</span>
             {[
               "register() called on AgentRegistry.sol — agentId derived on-chain",
               "AgentRegistered event emitted and indexed by Goldsky",
@@ -306,10 +306,10 @@ export default function RegisterPage() {
               "First 30 transactions build behavioral baseline automatically",
             ].map((step, i) => (
               <div key={i} className="flex items-start gap-3">
-                <span className="font-mono text-[10px] text-white/25 shrink-0 mt-0.5">
+                <span className="font-mono text-xs text-white/30 shrink-0 mt-0.5">
                   {String(i + 1).padStart(2, "0")}
                 </span>
-                <span className="font-mono text-xs text-white/50 leading-relaxed">{step}</span>
+                <span className="font-mono text-sm text-white/70 leading-relaxed">{step}</span>
               </div>
             ))}
           </div>

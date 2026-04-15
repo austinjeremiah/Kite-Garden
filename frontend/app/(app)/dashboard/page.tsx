@@ -35,9 +35,9 @@ function MetricCard({
 }) {
   return (
     <div className="border border-white/25 bg-black/40 p-6 flex flex-col gap-3 backdrop-blur-sm">
-      <span className="text-xs font-mono font-bold text-white/50 uppercase tracking-widest">{label}</span>
-      <span className={`text-4xl font-mono font-bold tabular-nums ${color}`}>{value}</span>
-      {sub && <span className="text-xs font-mono text-white/40">{sub}</span>}
+      <span className="text-sm font-mono font-bold text-white/50 uppercase tracking-widest">{label}</span>
+      <span className={`text-5xl font-mono font-bold tabular-nums ${color}`}>{value}</span>
+      {sub && <span className="text-sm font-mono text-white/40">{sub}</span>}
     </div>
   );
 }
@@ -62,10 +62,10 @@ function AgentList({ agents }: { agents: AgentRow[] }) {
     <div className="border border-white/25 bg-black/40 backdrop-blur-sm flex flex-col h-full">
       <div className="px-5 py-3 border-b border-white/25 grid grid-cols-[16px_1fr_130px_100px_90px] gap-3 items-center">
         <span />
-        <span className="text-[10px] font-mono font-bold text-white/50 uppercase tracking-widest">Agent</span>
-        <span className="text-[10px] font-mono font-bold text-white/50 uppercase tracking-widest">Metric</span>
-        <span className="text-[10px] font-mono font-bold text-white/50 uppercase tracking-widest">Issued / Denied</span>
-        <span className="text-[10px] font-mono font-bold text-white/50 uppercase tracking-widest">Status</span>
+        <span className="text-xs font-mono font-bold text-white/50 uppercase tracking-widest">Agent</span>
+        <span className="text-xs font-mono font-bold text-white/50 uppercase tracking-widest">Metric</span>
+        <span className="text-xs font-mono font-bold text-white/50 uppercase tracking-widest">Issued / Denied</span>
+        <span className="text-xs font-mono font-bold text-white/50 uppercase tracking-widest">Status</span>
       </div>
 
       <div className="flex-1 overflow-y-auto divide-y divide-white/10">
@@ -84,25 +84,25 @@ function AgentList({ agents }: { agents: AgentRow[] }) {
               <StatusDot status={agent.status} />
 
               <div className="flex flex-col gap-0.5 min-w-0">
-                <span className="font-mono text-sm font-bold text-white group-hover:text-white/90 truncate">
+                <span className="font-mono text-base font-bold text-white group-hover:text-white/90 truncate">
                   {agent.name}
                 </span>
-                <span className="font-mono text-[10px] text-white/30 truncate">
+                <span className="font-mono text-xs text-white/30 truncate">
                   {truncateId(agent.agentId)}
                 </span>
               </div>
 
-              <span className="font-mono text-sm font-semibold text-white/90 tabular-nums">
+              <span className="font-mono text-base font-semibold text-white/90 tabular-nums">
                 {metricDisplay}
               </span>
 
-              <span className="font-mono text-xs font-semibold tabular-nums">
+              <span className="font-mono text-sm font-semibold tabular-nums">
                 <span className="text-green-400">{agent.sessionsIssued}</span>
                 <span className="text-white/20"> / </span>
                 <span className="text-red-400">{agent.sessionsDenied}</span>
               </span>
 
-              <span className={`inline-flex items-center gap-1.5 text-[11px] font-mono font-bold px-2 py-0.5 border w-fit ${
+              <span className={`inline-flex items-center gap-1.5 text-xs font-mono font-bold px-2 py-1 border w-fit ${
                 agent.status === "active"
                   ? "border-green-500/50 text-green-400 bg-green-500/10"
                   : agent.status === "frozen"
@@ -130,7 +130,7 @@ function VerdictBadge({ verdict }: { verdict: FeedRow["verdict"] }) {
     SEEDED:  "text-white/30 border-white/10 bg-white/5",
   };
   return (
-    <span className={`text-[10px] font-mono font-bold px-2 py-0.5 border shrink-0 ${styles[verdict] ?? styles.ISSUED}`}>
+    <span className={`text-xs font-mono font-bold px-2 py-0.5 border shrink-0 ${styles[verdict] ?? styles.ISSUED}`}>
       {verdict}
     </span>
   );
@@ -148,8 +148,8 @@ function TxFeed({ rows }: { rows: FeedRow[] }) {
   return (
     <div className="border border-white/25 bg-black/40 backdrop-blur-sm flex flex-col h-full">
       <div className="px-5 py-3 border-b border-white/25 flex items-center justify-between">
-        <span className="text-[10px] font-mono font-bold text-white/50 uppercase tracking-widest">Live tx feed</span>
-        <span className="flex items-center gap-1.5 text-[10px] font-mono text-white/40">
+        <span className="text-xs font-mono font-bold text-white/50 uppercase tracking-widest">Live tx feed</span>
+        <span className="flex items-center gap-1.5 text-xs font-mono text-white/40">
           <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
           Goldsky · 5s
         </span>
@@ -157,13 +157,13 @@ function TxFeed({ rows }: { rows: FeedRow[] }) {
       <div className="flex-1 overflow-y-auto divide-y divide-white/10">
         {rows.map((row) => (
           <div key={row.id} className="px-5 py-3 flex items-center gap-3">
-            <span className="font-mono text-[10px] text-white/30 shrink-0 w-16 tabular-nums">
+            <span className="font-mono text-xs text-white/30 shrink-0 w-16 tabular-nums">
               {formatTime(new Date(row.timestamp).toISOString())}
             </span>
-            <span className="font-mono text-xs font-semibold text-white/70 flex-1 truncate min-w-0">
+            <span className="font-mono text-sm font-semibold text-white/70 flex-1 truncate min-w-0">
               {truncateId(row.agentId, 6)}
             </span>
-            <span className="font-mono text-xs font-semibold text-white/60 tabular-nums shrink-0">
+            <span className="font-mono text-sm font-semibold text-white/60 tabular-nums shrink-0">
               {row.amount.toFixed(2)} USDC
             </span>
             <VerdictBadge verdict={row.verdict} />
@@ -255,8 +255,8 @@ export default function DashboardPage() {
       {/* Top bar */}
       <div className="px-8 py-5 border-b border-white/25 flex items-center justify-between shrink-0">
         <div>
-          <h1 className="font-mono font-bold text-white text-lg">Dashboard</h1>
-          <p className="font-mono text-white/40 text-xs mt-0.5">
+          <h1 className="font-mono font-bold text-white text-2xl">Dashboard</h1>
+          <p className="font-mono text-white/40 text-sm mt-0.5">
             Behavioral gate · Kite testnet ·{" "}
             <a
               href={`${KITE_EXPLORER}`}
