@@ -285,7 +285,7 @@ export function buildFeed(
     return {
       id: p.id,
       agentId: p.agentDID,
-      amount: Number(p.amount) / 1e6, // USDC 6 decimals
+      amount: Number(BigInt(p.amount)) / 1e18, // amounts stored as 1e18-scaled
       verdict,
       timestamp: Number(p.timestamp) * 1000,
     };

@@ -14,9 +14,8 @@ import {
   fetchAgentPayments,
   fromWei,
   type GoldskyDecision,
-  type GoldskyPayment,
 } from "@/lib/goldsky";
-import { explorerTx, explorerAddress, KITE_EXPLORER } from "@/lib/config";
+import { explorerTx, explorerAddress } from "@/lib/config";
 import { truncateId } from "@/lib/mock-data";
 
 // ─── Person 2 mock — session key (swap when backend ready) ───────────────────
@@ -244,7 +243,7 @@ export default function AgentDetailPage() {
   const sortedPayments = [...payments].sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
   const amountData = sortedPayments.map((p, i) => ({
     index: i,
-    amount: Number(p.amount) / 1e6,
+    amount: Number(BigInt(p.amount)) / 1e18,
   }));
 
   // Tx table: cross-reference payments with decisions
@@ -261,7 +260,7 @@ export default function AgentDetailPage() {
     return {
       id: p.id,
       blockNumber: Number(p.blockNumber),
-      amount: Number(p.amount) / 1e6,
+      amount: Number(BigInt(p.amount)) / 1e18,
       to: p.to,
       timeDelta,
       verdict,
