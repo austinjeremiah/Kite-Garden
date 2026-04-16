@@ -412,6 +412,18 @@ await sdk.sendUserOperationAndWait(
 
 ---
 
+## Backend integration (Person 2) — optional
+
+The **`sendUserOperationAndWait`** flow for `AttractorGuard.logDecision` is specified in this guide and in **`gokite-aa-sdk`**. **Person 2 owns** backend AA integration: env flags, `kiteAaLogDecision.js`, signing, bundler calls, fallback to EOA `logDecision`, and keeping this guide accurate as the integration is verified.
+
+**Person 1** supplies what the chain and indexer already own: deployed addresses, subgraph/Goldsky URLs, and operational values (e.g. bundler RPC URL from infra or docs) that Person 2 plugs into `backend/.env`.
+
+Enable AA in the backend: `USE_AA_SDK_FOR_LOG_DECISION=true` and `KITE_AA_BUNDLER_URL` (see `backend/.env.example`). Implementation: `backend/src/kiteAaLogDecision.js` (same `logDecision` encoding as direct EOA calls via `encodeLogDecisionCalldata` in `chain.js`). **`GET /health`** returns `predictedAaBackendAddress` when AA mode is on — that address must be **authorized as backend** on `AttractorGuard` (the AA account is `msg.sender` on `logDecision`, not the bare backend EOA).
+
+**Session key rule (Kitegarden / Kite AA):** set `USE_AA_SESSION_KEY_RULE=true` (with AA enabled). On **ISSUED**, the backend sends a **single batched UserOp**: `addSessionKeyRule(sessionKey, agentId, selector, valueLimit)` on the AA account (see `encodeAddSessionKeyRuleCalldata` — **verify the ABI against the live Gokite account implementation** if the bundler reverts) followed by `logDecision` on **AttractorGuard** with the same `sessionKey` address. `SESSION_KEY_ALLOWED_SELECTOR` defaults to the EIP-3009 `transferWithAuthorization` selector; `valueLimit` uses the agent’s on-chain spending limit (Mongo `spendingLimit` → wei). **Gasless x402 execution** after issuance is still a separate integration (facilitator / relayer).
+
+---
+
 ## Useful Kite Testnet Addresses
 
 | Contract | Address |
@@ -429,7 +441,7 @@ await sdk.sendUserOperationAndWait(
 - **GoKite AA SDK:** https://www.npmjs.com/package/gokite-aa-sdk
 - **ERC-4337 Standard:** https://eips.ethereum.org/EIPS/eip-4337
 - **EntryPoint Contract:** https://github.com/eth-infinitism/account-abstraction
-- **Kite Testnet Explorer:** https://testnet.kitescan.io
+- **Kite Testnet Explorer:** https://testnet.kitescan.ai
 - **Kite Faucet:** https://faucet.staging.gokite.ai
 
 ---

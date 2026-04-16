@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { LayoutDashboard, UserPlus, Play, HelpCircle, Activity } from "lucide-react";
+import { AaBackendStatus } from "@/components/app/aa-backend-status";
 
 const navLinks = [
   { href: "/dashboard",    label: "Dashboard",    icon: LayoutDashboard },
@@ -55,6 +56,7 @@ export function Sidebar() {
           <Activity className="w-3 h-3 text-white/20" />
           <span className="text-xs font-mono text-white/20">Goldsky live</span>
         </div>
+        <AaBackendStatus />
       </div>
     </aside>
   );
