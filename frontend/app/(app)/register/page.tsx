@@ -79,7 +79,7 @@ export default function RegisterPage() {
         </p>
       </div>
 
-      <div className="px-8 py-8 max-w-xl flex flex-col gap-6">
+      <div className="px-8 py-8 w-full max-w-xl mx-auto flex flex-col gap-6">
         <form onSubmit={onSubmit} className="border border-white/25 bg-black/70 backdrop-blur-sm p-8 flex flex-col gap-6">
 
           {/* Agent label — becomes name */}

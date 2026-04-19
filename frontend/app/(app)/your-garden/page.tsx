@@ -343,7 +343,7 @@ export default function DemoPage() {
       {/* Top bar */}
       <div className="px-8 py-5 border-b border-white/25 flex items-center justify-between shrink-0">
         <div>
-          <h1 className="font-mono font-bold text-white text-2xl">Live Demo</h1>
+          <h1 className="font-mono font-bold text-white text-2xl">Your Garden</h1>
           <p className="font-mono text-white/40 text-sm mt-0.5">Behavioral gate · attractor geometry · real-time freeze</p>
         </div>
         <div className={`flex items-center gap-2 px-4 py-2 border font-mono font-bold text-sm ${

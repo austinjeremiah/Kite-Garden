@@ -8,7 +8,7 @@ import { AaBackendStatus } from "@/components/app/aa-backend-status";
 const navLinks = [
   { href: "/dashboard",    label: "Dashboard",    icon: LayoutDashboard },
   { href: "/register",     label: "Register",     icon: UserPlus        },
-  { href: "/demo",         label: "Demo",         icon: Play            },
+  { href: "/your-garden",  label: "Your Garden",  icon: Play            },
   { href: "/how-it-works", label: "How It Works", icon: HelpCircle      },
 ];
 
