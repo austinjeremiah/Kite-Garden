@@ -667,6 +667,18 @@ app.post("/api/agents/:agentId/revoke", async (req, res) => {
   res.json({ ok: true, agentId });
 });
 
+/** POST /api/agents/:agentId/freeze — mark frozen in MongoDB (no chain tx) */
+app.post("/api/agents/:agentId/freeze", async (req, res) => {
+  const agentId = normalizeAgentId(req.params.agentId);
+  if (!agentId) return res.status(400).json({ error: "invalid agentId" });
+  const db = await getDb();
+  await db.collection("agents").updateOne(
+    { agentId },
+    { $set: { status: "frozen", lastCheckedAt: new Date() } }
+  );
+  res.json({ ok: true, agentId });
+});
+
 /** POST /api/demo/inject-attack */
 app.post("/api/demo/inject-attack", async (req, res) => {
   if (!config.demoMode) {

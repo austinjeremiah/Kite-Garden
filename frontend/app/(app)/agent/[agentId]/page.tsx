@@ -14,8 +14,12 @@ import {
   KITE_AA_SDK_DOC_URL,
   KITE_CORE_CONCEPTS_DOC_URL,
   postGate,
+  postReauthorizeAgent,
+  postRevokeAgent,
   type GateResponse,
 } from "@/lib/api";
+import { fetchAgentPayments, type GoldskyPayment } from "@/lib/goldsky";
+import { explorerTx } from "@/lib/config";
 
 // ─── Session key countdown ────────────────────────────────────────────────────
 
@@ -134,6 +138,14 @@ export default function AgentDetailPage() {
   const [gateBusy, setGateBusy] = useState(false);
   const [gateResult, setGateResult] = useState<GateResponse | null>(null);
   const [gateErr, setGateErr] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionErr, setActionErr] = useState<string | null>(null);
+  const [payments, setPayments] = useState<GoldskyPayment[]>([]);
+
+  useEffect(() => {
+    if (!agentId) return;
+    fetchAgentPayments(agentId).then(setPayments).catch(() => null);
+  }, [agentId]);
 
   const { data: detail, isLoading, isError, error } = useAsyncPoll(
     [agentId, gateRefresh],
@@ -199,6 +211,32 @@ export default function AgentDetailPage() {
       setGateErr(e instanceof Error ? e.message : String(e));
     } finally {
       setGateBusy(false);
+    }
+  }
+
+  async function reauthorize() {
+    setActionErr(null);
+    setActionBusy(true);
+    try {
+      await postReauthorizeAgent(agent.agentId);
+      setGateRefresh((x) => x + 1);
+    } catch (e) {
+      setActionErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function revoke() {
+    setActionErr(null);
+    setActionBusy(true);
+    try {
+      await postRevokeAgent(agent.agentId);
+      setGateRefresh((x) => x + 1);
+    } catch (e) {
+      setActionErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setActionBusy(false);
     }
   }
 
@@ -461,8 +499,12 @@ export default function AgentDetailPage() {
                     </div>
                   </div>
                   <SessionCountdown expiresAt={sessionKey.expiresAt} />
-                  <button className="w-full border border-red-500/30 text-red-400 font-mono font-bold text-xs py-2.5 hover:bg-red-500/10 transition-colors">
-                    Force Freeze
+                  <button
+                    onClick={() => void revoke()}
+                    disabled={actionBusy}
+                    className="w-full border border-red-500/30 text-red-400 font-mono font-bold text-xs py-2.5 hover:bg-red-500/10 transition-colors disabled:opacity-40"
+                  >
+                    {actionBusy ? "Processing…" : "Force Freeze"}
                   </button>
                 </>
               ) : (
@@ -484,11 +526,24 @@ export default function AgentDetailPage() {
                 <p className="font-mono text-xs text-white/50 leading-relaxed">
                   Reset the behavioral baseline and commit a new hash on-chain to re-authorize, or permanently revoke this agent.
                 </p>
-                <button className="w-full border border-white/25 text-white font-mono font-bold text-xs py-2.5 hover:bg-white/5 transition-colors flex items-center justify-center gap-2">
-                  <RefreshCw className="w-3.5 h-3.5" /> Reset baseline &amp; re-authorize
+                {actionErr && (
+                  <p className="text-[10px] font-mono text-red-400/90 break-words">{actionErr}</p>
+                )}
+                <button
+                  onClick={() => void reauthorize()}
+                  disabled={actionBusy}
+                  className="w-full border border-white/25 text-white font-mono font-bold text-xs py-2.5 hover:bg-white/5 transition-colors flex items-center justify-center gap-2 disabled:opacity-40"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  {actionBusy ? "Processing…" : "Reset baseline & re-authorize"}
                 </button>
-                <button className="w-full border border-red-500/40 text-red-400 font-mono font-bold text-xs py-2.5 hover:bg-red-500/10 transition-colors flex items-center justify-center gap-2">
-                  <XCircle className="w-3.5 h-3.5" /> Permanently revoke agent
+                <button
+                  onClick={() => void revoke()}
+                  disabled={actionBusy}
+                  className="w-full border border-red-500/40 text-red-400 font-mono font-bold text-xs py-2.5 hover:bg-red-500/10 transition-colors flex items-center justify-center gap-2 disabled:opacity-40"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  {actionBusy ? "Processing…" : "Permanently revoke agent"}
                 </button>
               </div>
             )}
@@ -521,6 +576,54 @@ export default function AgentDetailPage() {
             </div>
           </div>
         </div>
+
+        {/* On-chain payment history from Goldsky */}
+        {payments.length > 0 && (
+          <div className="border border-white/25 bg-black/40 backdrop-blur-sm flex flex-col">
+            <div className="px-5 py-3 border-b border-white/25 flex items-center justify-between">
+              <span className="text-[10px] font-mono font-bold text-white/50 uppercase tracking-widest">
+                On-chain payment history · Goldsky
+              </span>
+              <span className="text-[10px] font-mono text-white/30">{payments.length} payments</span>
+            </div>
+            <div className="overflow-y-auto divide-y divide-white/10 max-h-[320px]">
+              <div className="px-5 py-2 grid grid-cols-[60px_90px_80px_1fr_80px] gap-3 items-center border-b border-white/10">
+                <span className="text-[9px] font-mono font-bold text-white/30 uppercase">Block</span>
+                <span className="text-[9px] font-mono font-bold text-white/30 uppercase">Amount</span>
+                <span className="text-[9px] font-mono font-bold text-white/30 uppercase">Type</span>
+                <span className="text-[9px] font-mono font-bold text-white/30 uppercase">Tx Hash</span>
+                <span className="text-[9px] font-mono font-bold text-white/30 uppercase">Explorer</span>
+              </div>
+              {payments.map((p) => (
+                <div key={p.id} className="px-5 py-2.5 grid grid-cols-[60px_90px_80px_1fr_80px] gap-3 items-center hover:bg-white/[0.03]">
+                  <span className="font-mono text-[10px] text-white/40 tabular-nums">{p.blockNumber}</span>
+                  <span className="font-mono text-xs font-semibold text-white/80 tabular-nums">
+                    {(Number(BigInt(p.amount)) / 1e18).toFixed(4)} USDC
+                  </span>
+                  <span className={`font-mono text-[10px] font-bold px-1.5 py-0.5 border w-fit ${
+                    p.paymentType === "ATTACK"
+                      ? "border-red-500/40 text-red-400 bg-red-500/10"
+                      : p.paymentType === "SEEDED"
+                      ? "border-white/20 text-white/40"
+                      : "border-green-500/40 text-green-400 bg-green-500/10"
+                  }`}>
+                    {p.paymentType}
+                  </span>
+                  <span className="font-mono text-[10px] text-white/30 truncate">{p.transactionHash.slice(0, 18)}…</span>
+                  <a
+                    href={explorerTx(p.transactionHash)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-[10px] text-[#eca8d6] hover:underline flex items-center gap-1"
+                  >
+                    Kitescan <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );

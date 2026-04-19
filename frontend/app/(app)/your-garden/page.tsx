@@ -5,8 +5,8 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { AlertTriangle, Zap, RefreshCw, Activity } from "lucide-react";
-import { BACKEND_URL } from "@/lib/config";
 import { truncateId } from "@/lib/mock-data";
+import { fetchDashboardData, postInjectAttack, postFreezeAgent, postReauthorizeAgent } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,7 +43,7 @@ function mockPaymentForPoint(index: number, state: DemoState) {
   };
 }
 
-const MOCK_AGENTS = [
+const FALLBACK_AGENTS = [
   { agentId: "0x616c6963652d657870656e73652d763100000000000000000000000000000000", name: "alice-expense-v1" },
   { agentId: "0x626f622d74726164696e672d763100000000000000000000000000000000000",  name: "bob-trading-v1" },
 ];
@@ -278,19 +278,33 @@ function Sparkline({ values, state }: { values: number[]; state: DemoState }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function DemoPage() {
+export default function YourGardenPage() {
   const [state, setState] = useState<DemoState>("normal");
-  const [agent, setAgent] = useState(MOCK_AGENTS[0]);
-  const [events, setEvents] = useState<GateEvent[]>(() =>
-    Array.from({ length: 6 }, (_, i) => ({
-      id: `e${i}`, agentId: MOCK_AGENTS[0].agentId, verdict: "ISSUED" as const,
+  const [liveAgents, setLiveAgents] = useState<{ agentId: string; name: string }[]>([]);
+  const [agent, setAgent] = useState(FALLBACK_AGENTS[0]);
+
+  useEffect(() => {
+    fetchDashboardData()
+      .then((d) => {
+        if (d.agents.length > 0) {
+          const mapped = d.agents.map((a) => ({ agentId: a.agentId, name: a.name }));
+          setLiveAgents(mapped);
+          setAgent(mapped[0]);
+        }
+      })
+      .catch(() => null);
+  }, []);
+  const [events, setEvents] = useState<GateEvent[]>([]);
+  const [metrics, setMetrics] = useState<number[]>([]);
+
+  useEffect(() => {
+    setEvents(Array.from({ length: 6 }, (_, i) => ({
+      id: `e${i}`, agentId: FALLBACK_AGENTS[0].agentId, verdict: "ISSUED" as const,
       metricValue: 1.18+Math.random()*0.15, amount: 0.8+Math.random()*0.4,
       timestamp: Date.now()-i*4000,
-    }))
-  );
-  const [metrics, setMetrics] = useState<number[]>(() =>
-    Array.from({ length: 40 }, () => 1.18+Math.random()*0.12)
-  );
+    })));
+    setMetrics(Array.from({ length: 40 }, () => 1.18+Math.random()*0.12));
+  }, []);
   const [injecting, setInjecting] = useState(false);
   const [hoveredPt, setHoveredPt] = useState<HoveredPoint | null>(null);
 
@@ -320,18 +334,20 @@ export default function DemoPage() {
 
   async function injectAttack() {
     setInjecting(true);
-    await fetch(`${BACKEND_URL}/api/demo/inject-attack`, {
-      method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ agentId: agent.agentId }),
-    }).catch(()=>null);
+    await postInjectAttack(agent.agentId).catch(() => null);
     setInjecting(false);
     setState("attacking");
+    // After animation completes (4s), freeze the real agent in backend
+    setTimeout(() => {
+      postFreezeAgent(agent.agentId).catch(() => null);
+    }, 4500);
   }
 
-  function reset() {
+  async function reset() {
     setState("normal");
     setMetrics(Array.from({length:40},()=>1.14+Math.random()*0.12));
     setEvents(Array.from({length:6},(_,i)=>({ id:`e${i}`, agentId:agent.agentId, verdict:"ISSUED" as const, metricValue:1.18+Math.random()*0.15, amount:0.8+Math.random()*0.4, timestamp:Date.now()-i*4000 })));
+    await postReauthorizeAgent(agent.agentId).catch(() => null);
   }
 
   const currentMetric = metrics[metrics.length-1] ?? 1.2;
@@ -479,7 +495,7 @@ export default function DemoPage() {
           {/* Agent selector */}
           <div className="border border-white/25 bg-black/70 p-5 flex flex-col gap-3">
             <span className="text-xs font-mono font-bold text-white/50 uppercase tracking-widest">Agent</span>
-            {MOCK_AGENTS.map(a=>(
+            {(liveAgents.length > 0 ? liveAgents : FALLBACK_AGENTS).map(a=>(
               <button key={a.agentId}
                 onClick={()=>{ if(state==="normal") setAgent(a); }}
                 className={`flex items-center gap-3 px-4 py-3 border text-left font-mono text-sm transition-colors ${state!=="normal"?"opacity-40 cursor-not-allowed":""} ${
@@ -487,6 +503,7 @@ export default function DemoPage() {
                 }`}>
                 <span className={`w-2 h-2 rounded-full shrink-0 ${agent.agentId===a.agentId?"bg-green-500 animate-pulse":"bg-white/20"}`} />
                 <span className="font-bold">{a.name}</span>
+                <span className="text-[10px] text-white/25 ml-auto">{truncateId(a.agentId, 6)}</span>
               </button>
             ))}
           </div>

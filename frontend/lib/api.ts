@@ -304,6 +304,26 @@ export type RegisterAgentBody = {
   description?: string;
 };
 
+export async function postReauthorizeAgent(agentId: string): Promise<{ ok: boolean; agentId: string }> {
+  return apiJson(`/api/agents/${encodeURIComponent(agentId)}/reauthorize`, { method: "POST" });
+}
+
+export async function postFreezeAgent(agentId: string): Promise<{ ok: boolean; agentId: string }> {
+  return apiJson(`/api/agents/${encodeURIComponent(agentId)}/freeze`, { method: "POST" });
+}
+
+export async function postRevokeAgent(agentId: string): Promise<{ ok: boolean; agentId: string }> {
+  return apiJson(`/api/agents/${encodeURIComponent(agentId)}/revoke`, { method: "POST" });
+}
+
+export async function postInjectAttack(agentId: string): Promise<{ ok: boolean; txHash?: string; explorerLink?: string }> {
+  return apiJson("/api/demo/inject-attack", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agentId }),
+  });
+}
+
 export async function postRegisterAgent(
   body: RegisterAgentBody
 ): Promise<{ agentId: string; txHash: string; explorerLink?: string }> {
