@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useEffect, useMemo, useCallback } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
@@ -19,6 +19,28 @@ interface GateEvent {
   metricValue: number;
   amount: number;
   timestamp: number;
+}
+
+interface HoveredPoint {
+  index: number;
+  x: number; y: number; z: number; // raw normalised coords
+  screenX: number; screenY: number;
+}
+
+// Mock payment data per point index (swap with real agentPayments later)
+function mockPaymentForPoint(index: number, state: DemoState) {
+  const seed = index * 137.508 + (state === "normal" ? 0 : 999);
+  const base = state === "normal" ? 0.9 : 0.2 + (index % 10) * 0.4;
+  const amt  = (t: number) => (base + Math.abs(Math.sin(seed * t)) * (state === "normal" ? 0.3 : 2.1)).toFixed(2);
+  return {
+    index,
+    xt:    amt(1),
+    xtTau: amt(2),
+    xt2Tau:amt(3),
+    block: 3_200_000 + index * 3,
+    ago:   `${Math.max(1, 300 - index * 2)}s ago`,
+    verdict: state === "normal" ? "ISSUED" : index % 3 === 0 ? "DENIED" : "ISSUED",
+  };
 }
 
 const MOCK_AGENTS = [
@@ -56,9 +78,19 @@ function lorenzPoints(
   return pts.map(([px, py, pz]) => [(px-cx)*scale, (py-cy)*scale, (pz-cz)*scale]);
 }
 
-// Chaotic: high rho blows up the attractor into two separate lobes flying apart
+// Attack: pure random scatter — nothing like the butterfly, unmistakably different
 function chaoticPoints(): [number, number, number][] {
-  return lorenzPoints(2500, 0.006, 10, 99, 2.667);
+  return Array.from({ length: 2500 }, () => {
+    // Random points in a large sphere — agent identity completely lost
+    const theta = Math.random() * Math.PI * 2;
+    const phi   = Math.acos(2 * Math.random() - 1);
+    const r     = 1.2 + Math.random() * 1.8;
+    return [
+      r * Math.sin(phi) * Math.cos(theta),
+      r * Math.sin(phi) * Math.sin(theta),
+      r * Math.cos(phi),
+    ] as [number, number, number];
+  });
 }
 
 // ─── 3D attractor cloud ───────────────────────────────────────────────────────
@@ -66,9 +98,11 @@ function chaoticPoints(): [number, number, number][] {
 function AttractorCloud({
   targetPts,
   state,
+  onHover,
 }: {
   targetPts: [number, number, number][];
   state: DemoState;
+  onHover: (pt: HoveredPoint | null) => void;
 }) {
   const ref = useRef<THREE.Points>(null);
   const currentPts = useRef<Float32Array>(new Float32Array(targetPts.length * 3));
@@ -130,7 +164,26 @@ function AttractorCloud({
     ref.current.geometry.attributes.position.needsUpdate = true;
   });
 
-  return <points ref={ref} geometry={geo} material={mat} />;
+  return (
+    <points
+      ref={ref}
+      geometry={geo}
+      material={mat}
+      onPointerMove={(e) => {
+        e.stopPropagation();
+        if (e.index == null) return;
+        const i = e.index;
+        const cur = currentPts.current;
+        onHover({
+          index: i,
+          x: cur[i*3], y: cur[i*3+1], z: cur[i*3+2],
+          screenX: e.nativeEvent.offsetX,
+          screenY: e.nativeEvent.offsetY,
+        });
+      }}
+      onPointerLeave={() => onHover(null)}
+    />
+  );
 }
 
 // ─── Glow sphere (ambient blob behind attractor) ──────────────────────────────
@@ -152,7 +205,7 @@ function GlowBlob({ state }: { state: DemoState }) {
   );
 }
 
-function Scene({ state }: { state: DemoState }) {
+function Scene({ state, onHover }: { state: DemoState; onHover: (pt: HoveredPoint | null) => void }) {
   const normalPts = useMemo(() => lorenzPoints(), []);
   const attackPts = useMemo(() => chaoticPoints(), []);
   const pts = state === "normal" ? normalPts : attackPts;
@@ -163,7 +216,7 @@ function Scene({ state }: { state: DemoState }) {
       <pointLight position={[4, 4, 4]} intensity={2} color={state === "frozen" ? "#ff2244" : "#eca8d6"} />
       <pointLight position={[-4, -3, -3]} intensity={0.8} color="#3355ff" />
       <GlowBlob state={state} />
-      <AttractorCloud targetPts={pts} state={state} />
+      <AttractorCloud targetPts={pts} state={state} onHover={onHover} />
     </>
   );
 }
@@ -239,6 +292,7 @@ export default function DemoPage() {
     Array.from({ length: 40 }, () => 1.18+Math.random()*0.12)
   );
   const [injecting, setInjecting] = useState(false);
+  const [hoveredPt, setHoveredPt] = useState<HoveredPoint | null>(null);
 
   useEffect(() => {
     if (state !== "normal") return;
@@ -302,13 +356,13 @@ export default function DemoPage() {
         </div>
       </div>
 
-      <div className="flex-1 p-6 grid grid-cols-[1fr_380px] gap-5">
+      <div className="flex-1 p-4 grid grid-cols-[1fr_360px] gap-4" style={{height:"calc(100vh - 82px)"}}>
 
         {/* LEFT — 3D + charts */}
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 min-h-0">
 
           {/* 3D Canvas */}
-          <div className="border border-white/25 bg-black relative" style={{height:"440px"}}>
+          <div className="border border-white/25 bg-black relative overflow-hidden flex-1 min-h-0">
             {/* Overlay labels */}
             <div className="absolute top-4 left-5 z-10 pointer-events-none">
               <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-widest block">
@@ -344,9 +398,39 @@ export default function DemoPage() {
             </div>
 
             <Canvas camera={{ position:[0, 0, 5.5], fov:50 }} gl={{antialias:true, alpha:true}}>
-              <Scene state={state} />
+              <Scene state={state} onHover={setHoveredPt} />
               <OrbitControls enableZoom enablePan={false} minDistance={2} maxDistance={10} />
             </Canvas>
+
+            {/* Hover tooltip */}
+            {hoveredPt && (() => {
+              const p = mockPaymentForPoint(hoveredPt.index, state);
+              return (
+                <div
+                  className="absolute z-20 pointer-events-none border border-white/25 bg-black/90 backdrop-blur-sm p-3 flex flex-col gap-1.5 min-w-[200px]"
+                  style={{ left: Math.min(hoveredPt.screenX + 14, 580), top: Math.max(hoveredPt.screenY - 10, 10) }}
+                >
+                  <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-widest">Point #{hoveredPt.index}</span>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs font-mono mt-1">
+                    <span className="text-white/40">x(t)</span>
+                    <span className="text-white font-bold">${p.xt} USDC</span>
+                    <span className="text-white/40">x(t+τ)</span>
+                    <span className="text-white font-bold">${p.xtTau} USDC</span>
+                    <span className="text-white/40">x(t+2τ)</span>
+                    <span className="text-white font-bold">${p.xt2Tau} USDC</span>
+                    <span className="text-white/40">block</span>
+                    <span className="text-white/70">{p.block.toLocaleString()}</span>
+                    <span className="text-white/40">time</span>
+                    <span className="text-white/70">{p.ago}</span>
+                  </div>
+                  <div className={`mt-1 text-[10px] font-mono font-bold px-2 py-0.5 border w-fit ${
+                    p.verdict === "ISSUED"
+                      ? "text-green-400 border-green-500/40 bg-green-500/10"
+                      : "text-red-400 border-red-500/40 bg-red-500/10"
+                  }`}>{p.verdict}</div>
+                </div>
+              );
+            })()}
 
             {/* Frozen overlay */}
             {state==="frozen" && (
@@ -360,7 +444,7 @@ export default function DemoPage() {
           </div>
 
           {/* Metric sparkline */}
-          <div className="border border-white/25 bg-black/70 p-5 flex flex-col gap-3">
+          <div className="border border-white/25 bg-black/70 px-5 py-3 flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-mono font-bold text-white/50 uppercase tracking-widest">D₂ metric history</span>
               <div className="flex gap-5 text-[10px] font-mono text-white/25">
@@ -368,11 +452,11 @@ export default function DemoPage() {
                 <span className="text-red-500/50">── threshold {(baseline*2).toFixed(3)}</span>
               </div>
             </div>
-            <div className="h-20"><Sparkline values={metrics} state={state} /></div>
+            <div className="h-14"><Sparkline values={metrics} state={state} /></div>
           </div>
 
           {/* Deviation bar */}
-          <div className="border border-white/25 bg-black/70 p-5 flex flex-col gap-2">
+          <div className="border border-white/25 bg-black/70 px-5 py-3 flex flex-col gap-2">
             <div className="flex items-center justify-between text-sm font-mono font-bold">
               <span className="text-white/40 uppercase tracking-widest text-xs">Deviation from baseline</span>
               <span className={state==="normal"?"text-green-400":state==="attacking"?"text-amber-400":"text-red-400"}>
@@ -390,7 +474,7 @@ export default function DemoPage() {
         </div>
 
         {/* RIGHT — controls + feed */}
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 min-h-0 overflow-y-auto">
 
           {/* Agent selector */}
           <div className="border border-white/25 bg-black/70 p-5 flex flex-col gap-3">

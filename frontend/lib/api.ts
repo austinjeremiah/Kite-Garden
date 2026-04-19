@@ -301,6 +301,7 @@ export type RegisterAgentBody = {
   thresholdMultiplier?: number;
   agentId?: string;
   didLabel?: string;
+  description?: string;
 };
 
 export async function postRegisterAgent(
