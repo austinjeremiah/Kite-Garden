@@ -12,6 +12,7 @@
     "seed": "npx hardhat run scripts/seed.js --network kiteTestnet",
     "seed:agent": "npx hardhat run scripts/seed-agent-by-label.js --network kiteTestnet",
     "authorize-backend": "npx hardhat run scripts/authorize-backend.js --network kiteTestnet",
+    "setup:demo": "npx hardhat run scripts/setup-demo-agents.js --network kiteTestnet",
     "register-with-metadata": "npx hardhat run scripts/register-agent-with-metadata.js --network kiteTestnet",
     "issue-session-keys-aa": "npx hardhat run scripts/issue-session-keys-aa-sdk.js --network kiteTestnet",
     "faucet-setup": "npx hardhat run scripts/faucet-setup.js --network kiteTestnet",

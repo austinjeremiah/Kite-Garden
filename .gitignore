@@ -42,3 +42,7 @@ out/
 # Misc
 *.tmp
 *.temp
+
+.agents/
+.gemini/
+.kite-passport/
