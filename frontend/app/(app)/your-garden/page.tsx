@@ -6,7 +6,7 @@ import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { AlertTriangle, Zap, RefreshCw, Activity } from "lucide-react";
 import { truncateId } from "@/lib/mock-data";
-import { fetchDashboardData, postInjectAttack, postFreezeAgent, postReauthorizeAgent } from "@/lib/api";
+import { fetchDashboardData, postInjectAttack, postFreezeAgent, postReauthorizeAgent, postGate } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -308,45 +308,70 @@ export default function YourGardenPage() {
   const [injecting, setInjecting] = useState(false);
   const [hoveredPt, setHoveredPt] = useState<HoveredPoint | null>(null);
 
-  useEffect(() => {
-    if (state !== "normal") return;
-    const t = setInterval(() => {
-      const m = 1.14+Math.random()*0.18;
-      setMetrics(p=>[...p.slice(-49), m]);
-      setEvents(p=>[{ id:`e${Date.now()}`, agentId:agent.agentId, verdict:"ISSUED", metricValue:m, amount:0.7+Math.random()*0.5, timestamp:Date.now() }, ...p.slice(0,9)]);
-    }, 2800);
-    return ()=>clearInterval(t);
-  }, [state, agent]);
-
-  useEffect(() => {
-    if (state !== "attacking") return;
-    let step = 0;
-    const t = setInterval(() => {
-      step++;
-      const m = 1.25+step*0.32+Math.random()*0.28;
-      setMetrics(p=>[...p.slice(-49), m]);
-      const denied = step >= 3;
-      setEvents(p=>[{ id:`e${Date.now()}`, agentId:agent.agentId, verdict: denied?"DENIED":"ISSUED", metricValue:m, amount:0.5+step*1.1+Math.random(), timestamp:Date.now() }, ...p.slice(0,9)]);
-      if (step >= 4) { setState("frozen"); clearInterval(t); }
-    }, 1000);
-    return ()=>clearInterval(t);
-  }, [state, agent]);
 
   async function injectAttack() {
     setInjecting(true);
-    await postInjectAttack(agent.agentId).catch(() => null);
+    try {
+      await postInjectAttack(agent.agentId);
+    } catch {
+      // attack tx may still succeed on-chain even if response errors
+    }
     setInjecting(false);
     setState("attacking");
-    // After animation completes (4s), freeze the real agent in backend
-    setTimeout(() => {
-      postFreezeAgent(agent.agentId).catch(() => null);
-    }, 4500);
   }
+
+  // ── Real gate polling ──────────────────────────────────────────────────────
+  // After inject-attack fires simulateAttack on-chain, Goldsky indexes the new
+  // payments. We poll POST /api/gate every 3s — the backend fetches Goldsky
+  // history, runs Python nolds, compares baseline, and returns real ISSUED/DENIED.
+  useEffect(() => {
+    if (state !== "attacking") return;
+    let active = true;
+    let step = 0;
+
+    const poll = async () => {
+      if (!active) return;
+      step++;
+      try {
+        const res = await postGate({
+          agentId: agent.agentId,
+          amount: 1,
+          destination: "0x0000000000000000000000000000000000000001",
+        });
+        const m = Number(res.metric) || 0;
+        const verdict = res.verdict as "ISSUED" | "DENIED";
+        setMetrics((p) => [...p.slice(-49), m]);
+        setEvents((p) => [
+          {
+            id: `e${Date.now()}`,
+            agentId: agent.agentId,
+            verdict,
+            metricValue: m,
+            amount: 1,
+            timestamp: Date.now(),
+          },
+          ...p.slice(0, 9),
+        ]);
+        if (verdict === "DENIED" || step >= 8) {
+          setState("frozen");
+          // Freeze in backend too if not already frozen
+          postFreezeAgent(agent.agentId).catch(() => null);
+          active = false;
+        }
+      } catch {
+        // gate error — keep polling
+      }
+      if (active) setTimeout(poll, 3000);
+    };
+
+    const t = setTimeout(poll, 2000); // wait 2s for Goldsky to index attack tx
+    return () => { active = false; clearTimeout(t); };
+  }, [state, agent]);
 
   async function reset() {
     setState("normal");
-    setMetrics(Array.from({length:40},()=>1.14+Math.random()*0.12));
-    setEvents(Array.from({length:6},(_,i)=>({ id:`e${i}`, agentId:agent.agentId, verdict:"ISSUED" as const, metricValue:1.18+Math.random()*0.15, amount:0.8+Math.random()*0.4, timestamp:Date.now()-i*4000 })));
+    setMetrics(Array.from({ length: 40 }, () => 1.14 + Math.random() * 0.12));
+    setEvents(Array.from({ length: 6 }, (_, i) => ({ id: `e${i}`, agentId: agent.agentId, verdict: "ISSUED" as const, metricValue: 1.18 + Math.random() * 0.15, amount: 0.8 + Math.random() * 0.4, timestamp: Date.now() - i * 4000 })));
     await postReauthorizeAgent(agent.agentId).catch(() => null);
   }
 

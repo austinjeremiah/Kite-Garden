@@ -17,7 +17,7 @@ export const KITE_EXPLORER = "https://testnet.kitescan.ai";
 export const KITE_RPC      = "https://rpc-testnet.gokite.ai/";
 
 export const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:3001";
+  process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:4000";
 
 export function explorerAddress(address: string) {
   return `${KITE_EXPLORER}/address/${address}`;

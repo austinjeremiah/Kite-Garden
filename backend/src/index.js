@@ -453,8 +453,17 @@ app.post("/api/agents/register", async (req, res) => {
     txHash = receipt.hash;
     explorerLink = explorerTxUrl(txHash);
   } catch (e) {
-    console.error("[register]", e);
-    return res.status(502).json({ error: `on-chain register failed: ${e.message}` });
+    const msg = String(e?.reason || e?.message || e);
+    const alreadyRegistered =
+      msg.toLowerCase().includes("already registered") ||
+      msg.toLowerCase().includes("agent already");
+    if (!alreadyRegistered) {
+      console.error("[register]", e);
+      return res.status(502).json({ error: `on-chain register failed: ${e.message}` });
+    }
+    // Agent exists on-chain but not in MongoDB — sync without re-registering
+    console.info("[register] agent already on-chain — syncing MongoDB record");
+    explorerLink = `${config.explorerBase}/address/${config.attractorGuardAddress}`;
   }
 
   const now = new Date();
@@ -613,6 +622,21 @@ app.post("/api/agents/:agentId/reauthorize", async (req, res) => {
   try {
     const owner = getOwnerSigner();
     const ag = getAttractorGuard(owner);
+
+    // Check on-chain state first — revoked agents cannot be reactivated
+    const onChain = await ag.getAgent(agentId);
+    if (onChain.isRevoked) {
+      // Sync MongoDB so this never happens again
+      await agents.updateOne(
+        { agentId },
+        { $set: { status: "revoked", lastCheckedAt: new Date() } }
+      );
+      return res.status(409).json({
+        error: "Agent is permanently revoked on-chain. Cannot reauthorize.",
+        agentId,
+      });
+    }
+
     const tx1 = await ag.setAgentStatus(agentId, true);
     await tx1.wait();
     const tx2 = await ag.resetBaseline(agentId, scaledMetric(0));
@@ -703,10 +727,74 @@ app.post("/api/demo/inject-attack", async (req, res) => {
   }
 });
 
+/** POST /api/agents/sync — reconcile MongoDB status with on-chain state */
+app.post("/api/agents/sync", async (_req, res) => {
+  const db = await getDb();
+  const agents = db.collection("agents");
+  const list = await agents.find({}).toArray();
+  const results = [];
+
+  let owner;
+  try {
+    owner = getOwnerSigner();
+  } catch {
+    return res.status(500).json({ error: "AGENT_OWNER_PRIVATE_KEY not set" });
+  }
+  const ag = getAttractorGuard(owner);
+
+  for (const a of list) {
+    try {
+      const onChain = await ag.getAgent(a.agentId);
+      const isZero = onChain.owner === "0x0000000000000000000000000000000000000000";
+      if (isZero) {
+        results.push({ agentId: a.agentId, action: "skipped — not on-chain" });
+        continue;
+      }
+      const correctStatus = onChain.isRevoked ? "revoked" : onChain.isActive ? "active" : "frozen";
+      if (a.status !== correctStatus) {
+        await agents.updateOne(
+          { agentId: a.agentId },
+          { $set: { status: correctStatus, lastCheckedAt: new Date() } }
+        );
+        results.push({ agentId: a.agentId, was: a.status, now: correctStatus });
+      } else {
+        results.push({ agentId: a.agentId, status: a.status, synced: true });
+      }
+    } catch (e) {
+      results.push({ agentId: a.agentId, error: e.message });
+    }
+  }
+  res.json({ synced: results.length, results });
+});
+
 const server = app.listen(config.port, async () => {
   try {
-    await getDb();
+    const db = await getDb();
     console.log(`Kite Garden backend listening on :${config.port}`);
+
+    // On startup: reconcile MongoDB ↔ on-chain status (fixes stale revoked docs)
+    try {
+      const agents = db.collection("agents");
+      const list = await agents.find({}).toArray();
+      if (list.length > 0 && config.agentOwnerPrivateKey) {
+        const owner = getOwnerSigner();
+        const ag = getAttractorGuard(owner);
+        for (const a of list) {
+          const onChain = await ag.getAgent(a.agentId).catch(() => null);
+          if (!onChain) continue;
+          const isZero = onChain.owner === "0x0000000000000000000000000000000000000000";
+          if (isZero) continue;
+          const correctStatus = onChain.isRevoked ? "revoked" : onChain.isActive ? "active" : "frozen";
+          if (a.status !== correctStatus) {
+            await agents.updateOne({ agentId: a.agentId }, { $set: { status: correctStatus } });
+            console.log(`[startup-sync] ${a.agentId.slice(0, 14)}… ${a.status} → ${correctStatus}`);
+          }
+        }
+        console.log("[startup-sync] MongoDB ↔ on-chain status reconciled");
+      }
+    } catch (e) {
+      console.warn("[startup-sync] skipped:", e.message);
+    }
   } catch (e) {
     console.error("MongoDB connection failed:", e.message);
     process.exit(1);

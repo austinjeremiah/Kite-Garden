@@ -7,9 +7,50 @@ from __future__ import annotations
 
 import logging
 import os
-
 import numpy as np
-import nolds
+
+# ── Python 3.13 compatibility ─────────────────────────────────────────────────
+# nolds 0.5.x uses pkg_resources (removed from Python 3.13 stdlib).
+# Step 1: inject a stub so datasets.py can import without crashing.
+# Step 2: load nolds.measures directly via importlib (skips nolds/__init__ which
+#         eagerly calls load_brown72() at module level and crashes on np.load(empty)).
+import sys, types as _types, io as _io, importlib, importlib.util as _iutil
+
+if "pkg_resources" not in sys.modules:
+    _pkg = _types.ModuleType("pkg_resources")
+    _pkg.resource_string = lambda *a: b""
+    _pkg.resource_listdir = lambda *a: []
+    _pkg.resource_stream = lambda *a: _io.BytesIO(b"")
+    sys.modules["pkg_resources"] = _pkg
+
+# Load nolds.measures without triggering nolds/__init__ → nolds.datasets
+def _load_nolds_measures():
+    import importlib.util as _u
+    import importlib.machinery as _m
+    import pathlib, sysconfig
+
+    # Find the nolds package directory
+    nolds_init = None
+    for p in sys.path:
+        candidate = pathlib.Path(p) / "nolds" / "__init__.py"
+        if candidate.exists():
+            nolds_init = candidate
+            break
+    if nolds_init is None:
+        raise ImportError("nolds package not found in sys.path")
+
+    measures_path = nolds_init.parent / "measures.py"
+    spec = _u.spec_from_file_location("nolds.measures", measures_path)
+    mod = _u.module_from_spec(spec)
+    sys.modules["nolds.measures"] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+_measures = _load_nolds_measures()
+
+import types as _t
+nolds = _t.SimpleNamespace(sampen=_measures.sampen, corr_dim=_measures.corr_dim)
+
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
