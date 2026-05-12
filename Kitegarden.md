@@ -63,9 +63,9 @@ When the agent is compromised or misbehaving, its transaction pattern changes. T
 
 When a shape shift is detected, Kite Garden does one thing: it does not issue the next Kite session key. Since session keys expire every 60 seconds, a refused renewal is a cryptographic freeze. The agent cannot make another payment until a human reviews and re-authorizes.
 
-Agent identity in Kite Garden is managed by a custom on-chain `AgentRegistry` contract deployed on Kite L1 testnet. Each agent gets a unique `agentId` derived on-chain. The behavioral baseline for that agent is hashed and committed to the registry — making the threshold tamper-evident and permanently auditable on Kite testnet. This means the entire lifecycle of an agent — registration, baseline commitment, anomaly detection, freeze — is visible on the Kite block explorer with no external dependencies.
+Agent identity in Kite Garden is anchored by a **Kite Agent Passport** — the official DID system for autonomous agents on Kite. Each agent has a unique Passport DID (format: `did:kite:username.eth/agenttype/name-v1`) created through the Kite Portal. The behavioral baseline for that agent is hashed and committed to the `AttractorGuard` contract on Kite L1 testnet — making the threshold tamper-evident and permanently auditable. This means the entire lifecycle of an agent — registration via Passport, baseline commitment, anomaly detection, freeze — is visible on the Kite block explorer with the Passport as the cryptographic anchor.
 
-**The gate is behavioral, not numerical. The identity and baseline are on-chain, not in a closed API. This is the novel part.**
+**The gate is behavioral, not numerical. The identity is managed by Kite's official Passport system. The baseline commitments are on-chain via AttractorGuard. This is the novel part.**
 
 ---
 
@@ -73,13 +73,15 @@ Agent identity in Kite Garden is managed by a custom on-chain `AgentRegistry` co
 
 This is the complete step-by-step flow of what happens every time an AI agent attempts a payment.
 
-### Step 1 — Agent is registered on-chain
+### Step 1 — Agent registers with Kite Agent Passport
 
-Before an agent can make any payment, its owner calls `register()` on the `AgentRegistry` contract deployed on Kite testnet. This produces a unique `agentId` (a `bytes32` value derived from `keccak256(name + wallet + timestamp)`). The agent's name, wallet address, owner address, and registration timestamp are stored on-chain. A `AgentRegistered` event is emitted. Goldsky indexes this event immediately.
+Before an agent can interact with Kite Garden, it must have a registered **Kite Agent Passport**. The Passport is created through the **Kite Portal** at <https://x402-portal-eight.vercel.app/>. This produces a unique Passport DID with format `did:kite:username.eth/agenttype/name-v1`. The agent's identity is now cryptographically anchored on Kite.
+
+When registering the agent with Kite Garden (via the `/api/agents/register` endpoint), the backend stores the Passport DID and creates a baseline record. The `AgentRegistered` event is emitted from the `AttractorGuard` contract. Goldsky indexes this event immediately, linking the Passport DID to the on-chain record.
 
 ### Step 2 — Agent constructs payment intent
 
-The agent (running as an autonomous process identified by its `agentId`) assembles an x402-format payment intent. This contains: the amount in testnet stablecoin, the destination address, the `agentId`, and a signed authorization from its current session key.
+The agent (running as an autonomous process identified by its Kite Agent Passport DID) assembles an x402-format payment intent. This contains: the amount in testnet stablecoin, the destination address, the Passport DID, and a signed authorization from its current session key.
 
 ### Step 3 — Intent arrives at Kite Garden API
 
@@ -87,7 +89,7 @@ Before the payment is submitted to Kite, the agent calls the Kite Garden backend
 
 ### Step 4 — Backend queries Goldsky for transaction history
 
-The backend takes the `agentId` and queries the Goldsky GraphQL endpoint to fetch the agent's full on-chain transaction history indexed from Kite testnet. It retrieves: amounts, timestamps, counterparty addresses, and block numbers for the last N transactions.
+The backend takes the agent's Passport DID and queries the Goldsky GraphQL endpoint to fetch the agent's full on-chain transaction history indexed from Kite testnet. It retrieves: amounts, timestamps, counterparty addresses, and block numbers for the last N transactions.
 
 ### Step 5 — Two-mode behavioral analysis
 
@@ -111,7 +113,7 @@ Two outcomes:
 
 ### Step 7 — Baseline hash commitment (first time and on reset)
 
-When an agent's baseline is first established (after 30 transactions) or reset by a human after a freeze, the backend computes a hash of the baseline parameters (mean, standard deviation, threshold multiplier, transaction count, timestamp) and calls `commitBaseline(agentId, baselineHash)` on the `AgentRegistry` contract. This hash is stored on-chain permanently. Anyone can verify that the baseline has not been quietly altered between now and when it was first set.
+When an agent's baseline is first established (after 30 transactions) or reset by a human after a freeze, the backend computes a hash of the baseline parameters (mean, standard deviation, threshold multiplier, transaction count, timestamp) and calls `logDecision()` on the `AttractorGuard` contract with the baseline hash. This hash is stored on-chain permanently. Anyone can verify that the baseline has not been quietly altered between now and when it was first set.
 
 ### Step 8a — STABLE path
 
@@ -121,11 +123,11 @@ Goldsky automatically indexes the new transaction. The agent's history grows by 
 
 ### Step 8b — DIVERGED path
 
-Backend does NOT call `addSessionKeyRule()`. No session key is issued. The backend calls `freezeAgent(agentId, metricValue)` on the `AgentRegistry` contract, emitting a `AgentFrozen` event on-chain. The agent receives a rejection response with the divergence metrics included. The current session key (if any) expires naturally in under 60 seconds. The agent is frozen — it cannot submit any payment without a new session key, and no new session key is issued until a human re-authorizes.
+Backend does NOT call `addSessionKeyRule()`. No session key is issued. The backend emits a `SessionKeyDenied` event from the `AttractorGuard` contract on-chain. The agent receives a rejection response with the divergence metrics included. The current session key (if any) expires naturally in under 60 seconds. The agent is frozen — it cannot submit any payment without a new session key, and no new session key is issued until a human re-authorizes.
 
 ### Step 9 — Human review
 
-The user sees the freeze event on the Kite Garden dashboard. They see: the divergence metric, the agent's recent transaction history, the behavioral chart showing where the anomaly was detected. They can choose to re-authorize (reset baseline, commit new hash on-chain, issue new session key) or permanently revoke the agent by calling `revokeAgent(agentId)` on the registry.
+The user sees the denial event on the Kite Garden dashboard. They see: the divergence metric, the agent's recent transaction history, the behavioral chart showing where the anomaly was detected. They can choose to re-authorize (reset baseline, commit new hash on-chain, issue new session key) or permanently revoke the agent.
 
 ---
 
@@ -165,7 +167,7 @@ SampEn handles the early-stage agent problem (small N, no reliable attractor rec
 
 ### Why On-Chain Baseline Hash
 
-The baseline parameters (mean, standard deviation, threshold) are the core of the detection system. If someone could quietly shift these numbers in the database, they could raise the anomaly threshold and hide attacks. By hashing the baseline and committing that hash to `AgentRegistry.sol`, the baseline becomes tamper-evident. Any change to the baseline produces a new hash and a new on-chain transaction — visible, timestamped, and permanent on Kite testnet.
+The baseline parameters (mean, standard deviation, threshold) are the core of the detection system. If someone could quietly shift these numbers in the database, they could raise the anomaly threshold and hide attacks. By hashing the baseline and committing that hash via the `AttractorGuard` contract, the baseline becomes tamper-evident. Any change to the baseline produces a new hash and a new on-chain transaction — visible, timestamped, and permanent on Kite testnet.
 
 ---
 
@@ -203,13 +205,19 @@ The baseline parameters (mean, standard deviation, threshold) are the core of th
 
 ## 6. Kite AI Stack — What We Use and Why
 
-### AgentRegistry.sol (Custom — replaces Kite Passport)
+### Agent Passport (Kite DID)
 
-This is Kite Garden's own on-chain identity layer. Every agent that interacts with the system is registered here. The registry stores the agent's name, wallet address, owner, status, and baseline hash. It emits events that Goldsky indexes.
+Every agent that interacts with Kite Garden must have a registered **Kite Agent Passport**. This is the official DID system on Kite, and it anchors the agent's identity cryptographically.
 
-This is deployed by Person 1 on Kite testnet. The `agentId` it produces is the key used everywhere in the system in place of a DID.
+**Format:** `did:kite:username.eth/agenttype/name-v1`
 
-Why this is better than Kite Passport: we control the contract, we store the baseline hash on-chain, and the full agent lifecycle is visible on the Kite explorer with no external API dependency.
+**Created through:** Kite Portal at https://x402-portal-eight.vercel.app/
+
+**Docs:** https://docs.gokite.ai/kite-agent-passport/developer-guide
+
+The Agent Passport is the cryptographic anchor of the agent's identity on Kite. When an agent registers with Kite Garden, its Passport DID becomes the key used throughout the system to query its transaction history from Goldsky, track its baseline, and receive gate decisions. The Passport ensures that identity is managed by Kite's official system, not by a custom contract.
+
+**Note:** Programmatic DID registration API is listed as "coming soon" in Kite docs. For now, agent DIDs are created manually through the Kite Portal before registering with Kite Garden.
 
 ### Privy AA Wallet
 
@@ -236,9 +244,9 @@ Key contract addresses on testnet:
 
 ### Session Key Mechanism
 
-`addSessionKeyRule(address sessionKeyAddress, bytes32 agentId, bytes4 functionSelector, uint256 valueLimit)`
+`addSessionKeyRule(address sessionKeyAddress, bytes32 agentDID, bytes4 functionSelector, uint256 valueLimit)`
 
-This is the payment gate. Kite Garden calls this only when behavioral analysis passes. If analysis fails, this call is never made. Session keys expire in approximately 60 seconds, so refusing to renew equals a freeze.
+This is the payment gate. Kite Garden calls this only when behavioral analysis passes. If analysis fails, this call is never made. Session keys expire in approximately 60 seconds, so refusing to renew equals a cryptographic freeze.
 
 ### Gasless Transactions
 
@@ -611,72 +619,59 @@ nolds docs: `https://cschoel.github.io/nolds/nolds.html`
 
 ## 9. Smart Contracts
 
-Three contracts deployed on Kite AI testnet. Written in Solidity, deployed with Hardhat.
+Two contracts deployed on Kite AI testnet. Written in Solidity, deployed with Hardhat.
 
-### Contract 1 — AgentRegistry.sol
+### Contract 1 — AttractorGuard.sol
 
-This is Kite Garden's on-chain identity and state layer. It replaces any external identity API with a contract we fully control.
+This contract records all gate decisions as on-chain events and stores agent registration data with baseline commitments.
 
-Stored per agent:
+**Stored per agent:**
 ```
-agentId: bytes32
-name: string
-wallet: address
-owner: address
+agentDID: bytes32 (derived from Kite Agent Passport)
+ownerAddress: address
+spendingLimit: uint256
+thresholdMultiplier: uint256
 baselineHash: bytes32
 baselineCommittedAt: uint256
 status: enum (Active, Frozen, Revoked)
 registeredAt: uint256
 ```
 
-Events emitted:
-- `AgentRegistered(agentId, name, wallet, owner, timestamp)`
-- `BaselineCommitted(agentId, baselineHash, timestamp)`
-- `AgentFrozen(agentId, metricValue, timestamp)`
-- `AgentRevoked(agentId, owner, timestamp)`
-- `AgentReauthorized(agentId, newBaselineHash, timestamp)`
+**Events emitted:**
+- `AgentRegistered(agentDID, owner, spendingLimit, thresholdMultiplier, timestamp)`
+- `BaselineReset(agentDID, newBaselineHash, timestamp)`
+- `SessionKeyIssued(agentDID, sessionKey, amount, metricValue, timestamp)`
+- `SessionKeyDenied(agentDID, amount, metricValue, baselineValue, timestamp)`
+- `AgentRevoked(agentDID, owner, timestamp)`
 
-Functions:
-- `register(string name, address wallet) returns (bytes32 agentId)` — derives agentId from keccak256, stores agent, emits AgentRegistered
-- `commitBaseline(bytes32 agentId, bytes32 baselineHash)` — stores baseline hash on-chain, emits BaselineCommitted
-- `freezeAgent(bytes32 agentId, uint256 metricValue)` — sets status to Frozen, emits AgentFrozen
-- `revokeAgent(bytes32 agentId)` — sets status to Revoked, emits AgentRevoked
-- `reauthorize(bytes32 agentId, bytes32 newBaselineHash)` — resets to Active, commits new hash, emits AgentReauthorized
-- `getAgent(bytes32 agentId) returns (Agent)` — view function
+**Functions:**
+- `registerAgent(bytes32 agentDID, uint256 spendingLimit, uint256 thresholdMultiplier)` — registers agent; emits `AgentRegistered`
+- `logDecision(bytes32 agentDID, bool issued, uint256 metricValue, uint256 baselineValue)` — logs gate decision; emits `SessionKeyIssued` or `SessionKeyDenied`
+- `resetBaseline(bytes32 agentDID, bytes32 newBaselineHash)` — commits new baseline hash; emits `BaselineReset`
+- `setAgentStatus(bytes32 agentDID, bool isActive)` — freeze/unfreeze agent
+- `revokeAgent(bytes32 agentDID)` — permanently revoke agent; emits `AgentRevoked`
+- `getAgent(bytes32 agentDID) returns (Agent)` — view function
 
-This contract is the source of truth for agent state. Goldsky indexes all its events.
+This contract is the source of truth for agent state and baseline commitments. Goldsky indexes all its events.
 
-### Contract 2 — AttractorGuard.sol
-
-Records gate decisions as on-chain events. This is the audit log of every payment attempt.
-
-Events emitted:
-- `SessionKeyIssued(agentId, sessionKey, amount, metricValue, timestamp)`
-- `SessionKeyDenied(agentId, amount, metricValue, baselineValue, timestamp)`
-
-Functions:
-- `logDecision(bytes32 agentId, bool issued, uint256 metricValue, uint256 baselineValue)` — called by backend on every gate decision
-
-The backend calls this after every gate outcome. Creates a permanent on-chain record of every behavioral analysis result.
-
-### Contract 3 — AgentPaymentSimulator.sol
+### Contract 2 — AgentPaymentSimulator.sol
 
 Demo-only contract. Allows the backend to emit mock payment events that Goldsky indexes. Used to seed transaction history for demo agents and to inject attack patterns during the live demo.
 
-Events emitted:
-- `PaymentExecuted(agentId, amount, to, timestamp)`
-- `AttackInjected(agentId, burstSize, timestamp)`
+**Events emitted:**
+- `PaymentExecuted(agentDID, amount, to, timestamp)`
+- `AttackInjected(agentDID, burstSize, timestamp)`
 
-Functions:
-- `simulatePayment(bytes32 agentId, uint256 amount, address to)` — emits a single payment event
-- `simulateNormal(bytes32 agentId, uint256 count)` — emits normal distribution payments
-- `simulateAttack(bytes32 agentId)` — emits anomalous burst: high amounts, fast succession, random addresses
+**Functions:**
+- `simulatePayment(bytes32 agentDID, uint256 amount, address to)` — emits a single payment event
+- `simulateNormal(bytes32 agentDID, uint256 count)` — emits normal distribution payments
+- `simulateAttack(bytes32 agentDID)` — emits anomalous burst: high amounts, fast succession, random addresses
 
 This contract means the demo runs on real on-chain events and real Goldsky indexing. Nothing is faked client-side.
 
-Deployment: Hardhat with network config pointing to `https://rpc-testnet.gokite.ai/`
+**Deployment:** Hardhat with network config pointing to `https://rpc-testnet.gokite.ai/`
 
-Docs: `https://docs.gokite.ai/kite-chain/building-dapps`
+**Docs:** `https://docs.gokite.ai/kite-chain/building-dapps`
 
 ---
 
@@ -686,16 +681,12 @@ The subgraph indexes events from all three contracts and provides the GraphQL AP
 
 ### What Gets Indexed
 
-From `AgentRegistry.sol`:
-- `AgentRegistered` → stored as `Agent` entities
-- `BaselineCommitted` → updates `Agent.baselineHash` and creates `BaselineCommit` entity
-- `AgentFrozen` → updates `Agent.status`, creates `FreezeEvent` entity
-- `AgentRevoked` → updates `Agent.status`
-- `AgentReauthorized` → updates `Agent.status` and `Agent.baselineHash`
-
 From `AttractorGuard.sol`:
+- `AgentRegistered` → stored as `Agent` entities
+- `BaselineReset` → updates `Agent.baselineHash` and creates `BaselineCommit` entity
 - `SessionKeyIssued` → stored as `GateDecision` with verdict ISSUED
 - `SessionKeyDenied` → stored as `GateDecision` with verdict DENIED
+- `AgentRevoked` → updates `Agent.status` to Revoked
 
 From `AgentPaymentSimulator.sol`:
 - `PaymentExecuted` → stored as `AgentPayment` linked to Agent
@@ -705,9 +696,10 @@ From `AgentPaymentSimulator.sol`:
 ```graphql
 type Agent @entity {
   id: ID!
-  name: String!
-  wallet: Bytes!
-  owner: Bytes!
+  didString: String!
+  ownerAddress: Bytes!
+  spendingLimit: BigInt!
+  thresholdMultiplier: BigInt!
   baselineHash: Bytes
   baselineCommittedAt: BigInt
   status: String!
@@ -762,9 +754,9 @@ Or use the Goldsky no-code wizard with all three contract ABIs and addresses.
 
 **Transaction history for math (backend gate):**
 ```graphql
-query AgentHistory($agentId: ID!, $limit: Int!) {
+query AgentHistory($agentDID: ID!, $limit: Int!) {
   agentPayments(
-    where: { agent: $agentId }
+    where: { agent: $agentDID }
     orderBy: timestamp
     orderDirection: desc
     first: $limit
@@ -782,8 +774,8 @@ query AgentHistory($agentId: ID!, $limit: Int!) {
 query AllAgents {
   agents(orderBy: registeredAt, orderDirection: desc) {
     id
-    name
-    wallet
+    didString
+    ownerAddress
     status
     paymentCount
     baselineHash
@@ -794,9 +786,9 @@ query AllAgents {
 
 **Gate decision history for agent detail chart (frontend):**
 ```graphql
-query AgentDecisions($agentId: ID!) {
+query AgentDecisions($agentDID: ID!) {
   gateDecisions(
-    where: { agent: $agentId }
+    where: { agent: $agentDID }
     orderBy: timestamp
     orderDirection: asc
     first: 50
