@@ -52,13 +52,19 @@ const FALLBACK_AGENTS = [
 // Standard Lorenz: tight butterfly = stable agent
 // High-rho Lorenz: exploded chaos = compromised agent
 
-function lorenzPoints(
-  n = 2500,
-  dt = 0.006,
-  sigma = 10,
-  rho = 28,
-  beta = 2.667
-): [number, number, number][] {
+/** Center + scale a point cloud into [-1.4, 1.4] */
+function normalizePoints(pts: [number, number, number][]): [number, number, number][] {
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), zs = pts.map(p => p[2]);
+  const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
+  const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
+  const cz = (Math.max(...zs) + Math.min(...zs)) / 2;
+  const spread = Math.max(Math.max(...xs)-Math.min(...xs), Math.max(...ys)-Math.min(...ys), Math.max(...zs)-Math.min(...zs));
+  const scale = 2.8 / spread;
+  return pts.map(([px, py, pz]) => [(px-cx)*scale, (py-cy)*scale, (pz-cz)*scale]);
+}
+
+/** Lorenz attractor — classic butterfly */
+function lorenzPoints(n = 2500, dt = 0.006, sigma = 10, rho = 28, beta = 2.667): [number, number, number][] {
   let x = 0.1, y = 0, z = 0;
   const pts: [number, number, number][] = [];
   for (let i = 0; i < n + 200; i++) {
@@ -68,15 +74,74 @@ function lorenzPoints(
     x += dx * dt; y += dy * dt; z += dz * dt;
     if (i > 200) pts.push([x, y, z]);
   }
-  // Centre + scale to [-1.4, 1.4]
-  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]), zs = pts.map(p => p[2]);
-  const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
-  const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
-  const cz = (Math.max(...zs) + Math.min(...zs)) / 2;
-  const spread = Math.max(Math.max(...xs)-Math.min(...xs), Math.max(...ys)-Math.min(...ys), Math.max(...zs)-Math.min(...zs));
-  const scale = 2.8 / spread;
-  return pts.map(([px, py, pz]) => [(px-cx)*scale, (py-cy)*scale, (pz-cz)*scale]);
+  return normalizePoints(pts);
 }
+
+/** Rössler attractor — single spiral wing with a fold */
+function rosslerPoints(n = 2500, dt = 0.04, a = 0.2, b = 0.2, c = 5.7): [number, number, number][] {
+  let x = 0.1, y = 0, z = 0;
+  const pts: [number, number, number][] = [];
+  for (let i = 0; i < n + 500; i++) {
+    const dx = -y - z;
+    const dy = x + a * y;
+    const dz = b + z * (x - c);
+    x += dx * dt; y += dy * dt; z += dz * dt;
+    if (i > 500) pts.push([x, y, z]);
+  }
+  return normalizePoints(pts);
+}
+
+/** Aizawa attractor — twisted 3D rosette */
+function aizawaPoints(n = 2500, dt = 0.01): [number, number, number][] {
+  const a = 0.95, b = 0.7, c = 0.6, d = 3.5, e = 0.25, f = 0.1;
+  let x = 0.1, y = 0, z = 0;
+  const pts: [number, number, number][] = [];
+  for (let i = 0; i < n + 500; i++) {
+    const dx = (z - b) * x - d * y;
+    const dy = d * x + (z - b) * y;
+    const dz = c + a * z - (z * z * z) / 3 - (x * x + y * y) * (1 + e * z) + f * z * x * x * x;
+    x += dx * dt; y += dy * dt; z += dz * dt;
+    if (i > 500) pts.push([x, y, z]);
+  }
+  return normalizePoints(pts);
+}
+
+/** Halvorsen attractor — curly tripod */
+function halvorsenPoints(n = 2500, dt = 0.008, a = 1.4): [number, number, number][] {
+  let x = -5, y = 0, z = 0;
+  const pts: [number, number, number][] = [];
+  for (let i = 0; i < n + 500; i++) {
+    const dx = -a * x - 4 * y - 4 * z - y * y;
+    const dy = -a * y - 4 * z - 4 * x - z * z;
+    const dz = -a * z - 4 * x - 4 * y - x * x;
+    x += dx * dt; y += dy * dt; z += dz * dt;
+    if (i > 500) pts.push([x, y, z]);
+  }
+  return normalizePoints(pts);
+}
+
+/** Thomas attractor — symmetric 3D coil */
+function thomasPoints(n = 2500, dt = 0.08, b = 0.208186): [number, number, number][] {
+  let x = 1, y = 1, z = 1;
+  const pts: [number, number, number][] = [];
+  for (let i = 0; i < n + 200; i++) {
+    const dx = Math.sin(y) - b * x;
+    const dy = Math.sin(z) - b * y;
+    const dz = Math.sin(x) - b * z;
+    x += dx * dt; y += dy * dt; z += dz * dt;
+    if (i > 200) pts.push([x, y, z]);
+  }
+  return normalizePoints(pts);
+}
+
+/** Attractor variants — picked deterministically per agent. */
+const ATTRACTORS = [
+  { name: "Lorenz",     fn: () => lorenzPoints(),    label: "Butterfly" },
+  { name: "Rössler",    fn: () => rosslerPoints(),   label: "Spiral wing" },
+  { name: "Aizawa",     fn: () => aizawaPoints(),    label: "Twisted rosette" },
+  { name: "Halvorsen",  fn: () => halvorsenPoints(), label: "Curly tripod" },
+  { name: "Thomas",     fn: () => thomasPoints(),    label: "Symmetric coil" },
+] as const;
 
 // Attack: pure random scatter — nothing like the butterfly, unmistakably different
 function chaoticPoints(): [number, number, number][] {
@@ -205,8 +270,21 @@ function GlowBlob({ state }: { state: DemoState }) {
   );
 }
 
-function Scene({ state, onHover }: { state: DemoState; onHover: (pt: HoveredPoint | null) => void }) {
-  const normalPts = useMemo(() => lorenzPoints(), []);
+/** Deterministic small hash from agentId hex → number for parameter variation */
+function hashAgent(agentId: string): number {
+  let h = 0;
+  for (let i = 2; i < agentId.length; i++) h = (h * 31 + agentId.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function Scene({ state, agentId, onHover }: { state: DemoState; agentId: string; onHover: (pt: HoveredPoint | null) => void }) {
+  // Each agent gets a fundamentally different attractor system
+  const attractor = useMemo(() => {
+    const h = hashAgent(agentId);
+    return ATTRACTORS[h % ATTRACTORS.length];
+  }, [agentId]);
+
+  const normalPts = useMemo(() => attractor.fn(), [attractor]);
   const attackPts = useMemo(() => chaoticPoints(), []);
   const pts = state === "normal" ? normalPts : attackPts;
 
@@ -308,6 +386,12 @@ export default function YourGardenPage() {
   const [injecting, setInjecting] = useState(false);
   const [hoveredPt, setHoveredPt] = useState<HoveredPoint | null>(null);
 
+  // Each agent has a unique attractor signature (derived from agentId)
+  const attractorVariant = useMemo(() => {
+    const h = hashAgent(agent.agentId);
+    return ATTRACTORS[h % ATTRACTORS.length];
+  }, [agent.agentId]);
+
 
   async function injectAttack() {
     setInjecting(true);
@@ -408,13 +492,13 @@ export default function YourGardenPage() {
             <div className="border-b border-white/15 px-5 py-3 flex items-start justify-between gap-4 shrink-0">
               <div>
                 <span className="text-[10px] font-mono font-bold text-white/50 uppercase tracking-widest block">
-                  Phase space · Lorenz attractor · Takens embedding (τ=3)
+                  Phase space · {attractorVariant.name} attractor · Takens embedding (τ=3)
                 </span>
                 <span className={`text-sm font-mono font-bold block mt-1 ${
                   state==="normal" ? "text-[#eca8d6]" : state==="attacking" ? "text-amber-400" : "text-red-400"
                 }`}>
                   {state==="normal"
-                    ? "Butterfly attractor — agent behavioral identity stable"
+                    ? `${attractorVariant.label} — agent behavioral identity stable`
                     : state==="attacking"
                     ? "Attractor deforming — geometric complexity diverging"
                     : "Attractor collapsed — behavioral identity unrecognizable"}
@@ -442,7 +526,7 @@ export default function YourGardenPage() {
               </div>
 
               <Canvas camera={{ position:[0, 0, 5.5], fov:50 }} gl={{antialias:true, alpha:true}}>
-                <Scene state={state} onHover={setHoveredPt} />
+                <Scene state={state} agentId={agent.agentId} onHover={setHoveredPt} />
                 <OrbitControls enableZoom enablePan={false} minDistance={2} maxDistance={10} />
               </Canvas>
 
@@ -491,10 +575,10 @@ export default function YourGardenPage() {
           {/* Metric sparkline */}
           <div className="border border-white/25 bg-black/70 px-5 py-3 flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-mono font-bold text-white/50 uppercase tracking-widest">D₂ metric history</span>
-              <div className="flex gap-5 text-[10px] font-mono text-white/25">
+              <span className="text-xs font-mono font-bold text-white uppercase tracking-widest">D₂ metric history</span>
+              <div className="flex gap-5 text-xs font-mono text-white/70">
                 <span>── baseline {baseline.toFixed(3)}</span>
-                <span className="text-red-500/50">── threshold {(baseline*2).toFixed(3)}</span>
+                <span className="text-red-300">── threshold {(baseline*2).toFixed(3)}</span>
               </div>
             </div>
             <div className="h-14"><Sparkline values={metrics} state={state} /></div>
@@ -503,7 +587,7 @@ export default function YourGardenPage() {
           {/* Deviation bar */}
           <div className="border border-white/25 bg-black/70 px-5 py-3 flex flex-col gap-2">
             <div className="flex items-center justify-between text-sm font-mono font-bold">
-              <span className="text-white/40 uppercase tracking-widest text-xs">Deviation from baseline</span>
+              <span className="text-white uppercase tracking-widest text-xs">Deviation from baseline</span>
               <span className={state==="normal"?"text-green-400":state==="attacking"?"text-amber-400":"text-red-400"}>
                 {state==="normal"?`+${Math.abs(deviationPct).toFixed(1)}%`:state==="attacking"?"+68.4%":"+190.1%"}
               </span>
@@ -512,8 +596,8 @@ export default function YourGardenPage() {
               <div className={`h-full transition-all duration-700 ${state==="normal"?"bg-green-500":state==="attacking"?"bg-amber-500":"bg-red-500"}`}
                 style={{width:state==="normal"?`${Math.min(Math.abs(deviationPct),10)+1}%`:state==="attacking"?"68%":"100%"}} />
             </div>
-            <div className="flex justify-between text-[10px] font-mono text-white/20">
-              <span>0%</span><span className="text-red-500/40">±2σ threshold</span><span>200%+</span>
+            <div className="flex justify-between text-xs font-mono text-white/60">
+              <span>0%</span><span className="text-red-300">±2σ threshold</span><span>200%+</span>
             </div>
           </div>
         </div>
@@ -543,9 +627,9 @@ export default function YourGardenPage() {
 
             {state==="normal" && (
               <button onClick={injectAttack} disabled={injecting}
-                className="w-full border border-amber-500/50 bg-amber-500/10 text-amber-400 font-mono font-bold text-sm py-4 hover:bg-amber-500/20 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-                <Zap className="w-5 h-5" />
-                {injecting ? "Injecting..." : "Inject Attack Pattern"}
+                className="w-full border border-white/30 bg-white/5 text-white font-mono font-bold text-sm py-3 hover:bg-white/10 hover:border-white/50 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                <Zap className="w-4 h-4 text-amber-400" />
+                {injecting ? "Injecting…" : "Simulate compromise"}
               </button>
             )}
 
