@@ -384,19 +384,19 @@ export default function AgentDetailPage() {
 
         {/* Freeze alert */}
         {agent.status === "frozen" && freezeReason && (
-          <div className="border border-red-500/40 bg-red-500/10 p-5 flex items-start gap-4">
-            <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+          <div className="border border-white/25 bg-black/70 backdrop-blur-sm p-5 flex items-start gap-4">
+            <AlertTriangle className="w-5 h-5 text-red-300 shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
-              <p className="font-mono font-bold text-red-400 text-sm mb-1">Agent frozen — behavioral anomaly detected</p>
-              <p className="font-mono text-xs text-white/50">
-                Metric <span className="text-red-400 font-bold">{freezeReason.metricValue}</span> exceeded threshold <span className="text-white/70">{freezeReason.threshold}</span> at {new Date(freezeReason.timestamp).toLocaleTimeString()}
+              <p className="font-mono font-bold text-white text-sm mb-1">Agent frozen — behavioral anomaly detected</p>
+              <p className="font-mono text-xs text-white/75">
+                Metric <span className="text-red-300 font-bold">{freezeReason.metricValue}</span> exceeded threshold <span className="text-white font-semibold">{freezeReason.threshold}</span> at {new Date(freezeReason.timestamp).toLocaleTimeString()}
               </p>
             </div>
             <a
               href={freezeReason.explorerLink}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-mono text-[10px] text-red-400/70 hover:text-red-400 flex items-center gap-1 shrink-0"
+              className="font-mono text-xs text-white/70 hover:text-white flex items-center gap-1 shrink-0"
             >
               AgentFrozen event <ExternalLink className="w-3 h-3" />
             </a>
@@ -617,18 +617,18 @@ export default function AgentDetailPage() {
 
             {/* Re-authorize panel — only when frozen */}
             {agent.status === "frozen" && (
-              <div className="border border-red-500/30 bg-red-500/5 p-5 flex flex-col gap-4">
-                <span className="text-[10px] font-mono font-bold text-red-400/70 uppercase tracking-widest">Human review required</span>
-                <p className="font-mono text-xs text-white/50 leading-relaxed">
+              <div className="border border-white/25 bg-black/70 backdrop-blur-sm p-5 flex flex-col gap-4">
+                <span className="text-xs font-mono font-bold text-white uppercase tracking-widest">Human review required</span>
+                <p className="font-mono text-xs text-white/75 leading-relaxed">
                   Reset the behavioral baseline and commit a new hash on-chain to re-authorize, or permanently revoke this agent.
                 </p>
                 {actionErr && (
-                  <p className="text-[10px] font-mono text-red-400/90 break-words">{actionErr}</p>
+                  <p className="text-xs font-mono text-red-300 break-words">{actionErr}</p>
                 )}
                 <button
                   onClick={() => void reauthorize()}
                   disabled={actionBusy}
-                  className="w-full border border-white/25 text-white font-mono font-bold text-xs py-2.5 hover:bg-white/5 transition-colors flex items-center justify-center gap-2 disabled:opacity-40"
+                  className="w-full border border-white/40 bg-white/5 text-white font-mono font-bold text-xs py-3 hover:bg-white/10 transition-colors flex items-center justify-center gap-2 disabled:opacity-40"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   {actionBusy ? "Processing…" : "Reset baseline & re-authorize"}
@@ -636,7 +636,7 @@ export default function AgentDetailPage() {
                 <button
                   onClick={() => void revoke()}
                   disabled={actionBusy}
-                  className="w-full border border-red-500/40 text-red-400 font-mono font-bold text-xs py-2.5 hover:bg-red-500/10 transition-colors flex items-center justify-center gap-2 disabled:opacity-40"
+                  className="w-full border border-red-500/60 text-red-300 font-mono font-bold text-xs py-3 hover:bg-red-500/15 transition-colors flex items-center justify-center gap-2 disabled:opacity-40"
                 >
                   <XCircle className="w-3.5 h-3.5" />
                   {actionBusy ? "Processing…" : "Permanently revoke agent"}

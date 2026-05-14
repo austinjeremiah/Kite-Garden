@@ -403,45 +403,48 @@ export default function YourGardenPage() {
         <div className="flex flex-col gap-3 min-h-0">
 
           {/* 3D Canvas */}
-          <div className="border border-white/25 bg-black relative overflow-hidden flex-1 min-h-0">
-            {/* Overlay labels */}
-            <div className="absolute top-4 left-5 z-10 pointer-events-none">
-              <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-widest block">
-                Phase space · Lorenz attractor · Takens embedding (τ=3)
-              </span>
-              <span className={`text-sm font-mono font-bold block mt-1 ${
-                state==="normal" ? "text-[#eca8d6]" : state==="attacking" ? "text-amber-400" : "text-red-400"
-              }`}>
-                {state==="normal"
-                  ? "Butterfly attractor — agent behavioral identity stable"
-                  : state==="attacking"
-                  ? "Attractor deforming — geometric complexity diverging"
-                  : "Attractor collapsed — behavioral identity unrecognizable"}
-              </span>
+          <div className="border border-white/25 bg-black flex flex-col flex-1 min-h-0">
+            {/* Top bar — heading + D₂ (above canvas, fixed) */}
+            <div className="border-b border-white/15 px-5 py-3 flex items-start justify-between gap-4 shrink-0">
+              <div>
+                <span className="text-[10px] font-mono font-bold text-white/50 uppercase tracking-widest block">
+                  Phase space · Lorenz attractor · Takens embedding (τ=3)
+                </span>
+                <span className={`text-sm font-mono font-bold block mt-1 ${
+                  state==="normal" ? "text-[#eca8d6]" : state==="attacking" ? "text-amber-400" : "text-red-400"
+                }`}>
+                  {state==="normal"
+                    ? "Butterfly attractor — agent behavioral identity stable"
+                    : state==="attacking"
+                    ? "Attractor deforming — geometric complexity diverging"
+                    : "Attractor collapsed — behavioral identity unrecognizable"}
+                </span>
+              </div>
+              <div className="text-right shrink-0">
+                <span className="text-[10px] font-mono text-white/40 uppercase tracking-widest block">D₂ correlation dim.</span>
+                <span className={`font-mono font-bold text-4xl tabular-nums block leading-none mt-1 ${
+                  state==="normal" ? "text-[#eca8d6]" : state==="attacking" ? "text-amber-400" : "text-red-400"
+                }`}>
+                  {currentMetric.toFixed(3)}
+                </span>
+                <span className={`font-mono text-xs font-bold block mt-1 ${
+                  Math.abs(deviationPct)<10 ? "text-green-400" : deviationPct<60 ? "text-amber-400" : "text-red-400"
+                }`}>
+                  {deviationPct>0?"+":""}{deviationPct.toFixed(1)}% deviation
+                </span>
+              </div>
             </div>
 
-            <div className="absolute top-4 right-5 z-10 text-right pointer-events-none">
-              <span className="text-[10px] font-mono text-white/30 uppercase tracking-widest block">D₂ correlation dim.</span>
-              <span className={`font-mono font-bold text-5xl tabular-nums block leading-none mt-1 ${
-                state==="normal" ? "text-[#eca8d6]" : state==="attacking" ? "text-amber-400" : "text-red-400"
-              }`}>
-                {currentMetric.toFixed(3)}
-              </span>
-              <span className={`font-mono text-sm font-bold block mt-1 ${
-                Math.abs(deviationPct)<10 ? "text-green-400" : deviationPct<60 ? "text-amber-400" : "text-red-400"
-              }`}>
-                {deviationPct>0?"+":""}{deviationPct.toFixed(1)}% deviation
-              </span>
-            </div>
+            {/* Canvas region — geometry stays inside this */}
+            <div className="relative overflow-hidden flex-1 min-h-0">
+              <div className="absolute bottom-4 left-5 z-10 pointer-events-none flex gap-5 text-[10px] font-mono text-white/20">
+                <span>x(t) →</span><span>x(t+τ) →</span><span>x(t+2τ)</span>
+              </div>
 
-            <div className="absolute bottom-4 left-5 z-10 pointer-events-none flex gap-5 text-[10px] font-mono text-white/20">
-              <span>x(t) →</span><span>x(t+τ) →</span><span>x(t+2τ)</span>
-            </div>
-
-            <Canvas camera={{ position:[0, 0, 5.5], fov:50 }} gl={{antialias:true, alpha:true}}>
-              <Scene state={state} onHover={setHoveredPt} />
-              <OrbitControls enableZoom enablePan={false} minDistance={2} maxDistance={10} />
-            </Canvas>
+              <Canvas camera={{ position:[0, 0, 5.5], fov:50 }} gl={{antialias:true, alpha:true}}>
+                <Scene state={state} onHover={setHoveredPt} />
+                <OrbitControls enableZoom enablePan={false} minDistance={2} maxDistance={10} />
+              </Canvas>
 
             {/* Hover tooltip */}
             {hoveredPt && (() => {
@@ -482,6 +485,7 @@ export default function YourGardenPage() {
                 </div>
               </div>
             )}
+            </div>
           </div>
 
           {/* Metric sparkline */}
