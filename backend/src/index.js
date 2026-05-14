@@ -598,7 +598,8 @@ app.post("/api/agents/register", async (req, res) => {
   }
 
   const owner = getOwnerSigner();
-  if (owner.address.toLowerCase() !== String(ownerAddress).toLowerCase()) {
+  // When user signs the tx via their wallet, ownerAddress may differ from env key — skip check
+  if (!req.body.walletTxHash && owner.address.toLowerCase() !== String(ownerAddress).toLowerCase()) {
     return res.status(400).json({
       error: "AGENT_OWNER_PRIVATE_KEY address must match ownerAddress",
       expected: owner.address,
@@ -664,7 +665,13 @@ app.post("/api/agents/register", async (req, res) => {
 
   let txHash = "";
   let explorerLink = "";
-  try {
+  const walletTxHash = req.body.walletTxHash;
+  if (walletTxHash) {
+    // user signed the tx on the frontend — skip on-chain re-registration
+    txHash = walletTxHash;
+    explorerLink = explorerTxUrl(walletTxHash);
+    console.info("[register] using wallet-signed txHash, skipping on-chain register");
+  } else try {
     const ag = getAttractorGuard(owner);
     const tx = await ag.registerAgent(agentId, spendingLimitWei, th);
     const receipt = await tx.wait();
@@ -876,7 +883,9 @@ app.post("/api/agents/:agentId/reauthorize", async (req, res) => {
   const a = await loadAgent(agents, agentId);
   if (!a) return res.status(404).json({ error: "not found" });
 
-  try {
+  if (req.body && req.body.walletTxHash) {
+    console.info("[reauthorize] using wallet-signed txHash, skipping on-chain calls");
+  } else try {
     const owner = getOwnerSigner();
     const ag = getAttractorGuard(owner);
 
@@ -931,7 +940,9 @@ app.post("/api/agents/:agentId/revoke", async (req, res) => {
   const a = await loadAgent(agents, agentId);
   if (!a) return res.status(404).json({ error: "not found" });
 
-  try {
+  if (req.body && req.body.walletTxHash) {
+    console.info("[revoke] using wallet-signed txHash, skipping on-chain call");
+  } else try {
     const owner = getOwnerSigner();
     const ag = getAttractorGuard(owner);
     const tx = await ag.revokeAgent(agentId);

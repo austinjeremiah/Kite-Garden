@@ -6,41 +6,42 @@ const steps = [
   {
     number: "01",
     title: "Register",
-    subtitle: "on-chain identity",
-    description: "Agent owner calls register() on AgentRegistry.sol. A unique agentId (bytes32) is derived on-chain. Goldsky indexes the AgentRegistered event immediately. The first 30 transactions establish the behavioral baseline.",
-    code: `// AgentRegistry.sol
-register("alice-expense-agent", wallet)
-// → agentId: 0x4a3b...f9c2
-// → AgentRegistered event emitted
-// → Goldsky indexes within 1 block`,
+    subtitle: "Kite Agent Passport",
+    description: "Every agent is registered through the Kite Agent Passport — the official DID system on Kite. The Passport is the cryptographic anchor of the agent's identity. The behavioral baseline is then committed on-chain, so the threshold itself is tamper-evident.",
+    code: `// One registration call does both:
+//   1. Kite Agent Passport DID
+//      did:kite:user/agent/alice-expense-v1
+//   2. On-chain identity + baseline anchor
+
+// → Passport is the source of truth for identity`,
   },
   {
     number: "02",
     title: "Gate",
     subtitle: "every payment",
-    description: "Before any payment, the agent calls POST /api/gate. The backend queries Goldsky for transaction history, runs nolds analysis (SampEn or correlation dimension), and compares against the stored baseline.",
+    description: "Before any payment, the agent calls the behavioral gate. The backend pulls the agent's full on-chain payment history, runs chaos-theory math (sample entropy / correlation dimension), and compares the current geometric signature against the stored baseline.",
     code: `// Agent calls gate before every payment
 POST /api/gate
 { agentId, amount, destination, x402Payload }
 
 // Backend flow:
-// 1. Fetch history from Goldsky GraphQL
-// 2. POST amounts[] to Python /analyze
-// 3. Compare metric vs baseline ± 2σ`,
+//   1. Pull payment history (Goldsky)
+//   2. Compute behavioral metric (Python)
+//   3. Compare metric vs baseline ± 2σ`,
   },
   {
     number: "03",
     title: "Issue",
     subtitle: "or freeze",
-    description: "STABLE: gokite-aa-sdk issues a 60-second session key. DIVERGED: freezeAgent() is called on-chain, emitting AgentFrozen. No session key. Agent cannot pay. Human reviews the on-chain audit trail.",
+    description: "STABLE: a 60-second Kite session key is issued; agent can pay. DIVERGED: no key is issued, a freeze event is emitted on-chain, and the agent halts. A human reviews the audit trail and either re-authorizes or revokes.",
     code: `// STABLE path
-addSessionKeyRule(sessionKey, agentId, selector, limit)
-// → verdict: "ISSUED"
+//   → 60s Kite session key issued
+//   → verdict: "ISSUED"
 
 // DIVERGED path
-freezeAgent(agentId, metricValue)
-// → AgentFrozen event on Kite explorer
-// → verdict: "DENIED"`,
+//   → no session key issued
+//   → freeze event emitted on-chain
+//   → verdict: "DENIED"`,
   },
 ];
 

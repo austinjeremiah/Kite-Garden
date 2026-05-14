@@ -2,8 +2,8 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { LayoutDashboard, UserPlus, Play, HelpCircle, Activity } from "lucide-react";
-import { AaBackendStatus } from "@/components/app/aa-backend-status";
+import { LayoutDashboard, UserPlus, Play, HelpCircle, Activity, ExternalLink } from "lucide-react";
+import { GOLDSKY_ENDPOINT } from "@/lib/config";
 
 const navLinks = [
   { href: "/dashboard",    label: "Dashboard",    icon: LayoutDashboard },
@@ -35,8 +35,8 @@ export function Sidebar() {
               href={href}
               className={`flex items-center gap-3 px-3 py-2.5 text-sm font-mono transition-colors rounded-sm ${
                 active
-                  ? "bg-white/10 text-white"
-                  : "text-white/40 hover:text-white/80 hover:bg-white/5"
+                  ? "bg-white/15 text-white"
+                  : "text-white/85 hover:text-white hover:bg-white/10"
               }`}
             >
               <Icon className="w-4 h-4 shrink-0" />
@@ -47,16 +47,21 @@ export function Sidebar() {
       </nav>
 
       {/* Status */}
-      <div className="px-6 py-4 border-t border-white/10">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-xs font-mono text-white/40">Kite testnet</span>
-        </div>
+      <div className="px-6 py-4 border-t border-white/10 flex flex-col gap-2">
         <div className="flex items-center gap-2">
-          <Activity className="w-3 h-3 text-white/20" />
-          <span className="text-xs font-mono text-white/20">Goldsky live</span>
+          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+          <span className="text-xs font-mono text-white/80">Kite testnet</span>
         </div>
-        <AaBackendStatus />
+        <a
+          href={GOLDSKY_ENDPOINT}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 group hover:text-white transition-colors"
+        >
+          <Activity className="w-3 h-3 text-white/60 group-hover:text-white" />
+          <span className="text-xs font-mono text-white/80 group-hover:text-white">Goldsky live</span>
+          <ExternalLink className="w-2.5 h-2.5 text-white/50 group-hover:text-white ml-auto" />
+        </a>
       </div>
     </aside>
   );

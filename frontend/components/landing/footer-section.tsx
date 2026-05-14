@@ -17,10 +17,10 @@ const footerLinks = {
     { name: "Kite explorer", href: "https://testnet.kitescan.ai" },
   ],
   Stack: [
+    { name: "Kite Agent Passport", href: "https://docs.gokite.ai/kite-agent-passport/cli-reference" },
     { name: "Kite AI docs", href: "https://docs.gokite.ai" },
     { name: "Goldsky docs", href: "https://docs.goldsky.com/chains/kite-ai" },
     { name: "x402 spec", href: "https://github.com/coinbase/x402" },
-    { name: "nolds docs", href: "https://cschoel.github.io/nolds/nolds.html" },
   ],
   Math: [
     { name: "Takens (1981)", href: "#math" },
@@ -120,7 +120,7 @@ export function FooterSection() {
               </a>
 
               <p className="text-white/50 leading-relaxed mb-8 max-w-xs text-sm font-mono">
-                Behavioral session key revocation for autonomous AI agents on Kite L1 testnet.
+                Behavioral session key revocation for autonomous AI agents — anchored by the Kite Agent Passport on Kite L1 testnet.
               </p>
 
               {/* Social Links */}

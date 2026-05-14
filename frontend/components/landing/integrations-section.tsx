@@ -4,34 +4,39 @@ import { useEffect, useState, useRef } from "react";
 
 const integrations = [
   {
-    name: "Kite AI",
-    category: "L1 Testnet",
-    description: "Base chain. All contracts deployed here. Bundler RPC, AA wallets, gasless transactions.",
+    name: "Kite Agent Passport",
+    category: "Identity · DID",
+    description: "Official Kite DID system. Every agent gets a Passport (did:kite:user/agent/name-v1) — the cryptographic anchor of agent identity. Registration is automatic.",
   },
   {
-    name: "gokite-aa-sdk",
-    category: "Session Keys",
-    description: "ERC-4337 wrapper. Issues addSessionKeyRule() on STABLE verdict. Submits UserOperations via bundler.",
+    name: "Kite AI",
+    category: "L1 Testnet",
+    description: "Base chain. Agent registry, gate decisions, and freeze events all live here. Bundler RPC and gasless transactions for session keys.",
+  },
+  {
+    name: "Session Keys",
+    category: "Short-lived auth",
+    description: "60-second keys issued on STABLE verdicts. Refusing to renew is a cryptographic freeze — no override possible without human review.",
   },
   {
     name: "Goldsky",
     category: "Indexing",
-    description: "Subgraph indexes all three contracts. GraphQL API for agent history, gate decisions, baseline commits.",
+    description: "Real-time subgraph over Kite. Powers the payment history, gate decisions, and audit trail you see on every page.",
   },
   {
     name: "x402",
     category: "Payment Protocol",
-    description: "EIP-3009 TransferWithAuthorization format. Signed by agent, validated by backend before gate runs.",
+    description: "Signed payment intents (EIP-3009). Agent signs, gate validates, then the payment is forwarded — never the other way around.",
   },
   {
-    name: "nolds",
-    category: "Math",
-    description: "Python library. nolds.sampen() for <200 tx. nolds.corr_dim() for ≥200 tx via RANSAC fitting.",
+    name: "Chaos-theory math",
+    category: "Behavioral analysis",
+    description: "Sample entropy for early-stage agents, correlation dimension for mature agents. Switches automatically once enough history exists.",
   },
   {
-    name: "ethers.js",
-    category: "Contract Calls",
-    description: "Backend calls AgentRegistry: commitBaseline(), freezeAgent(), revokeAgent() via Kite testnet RPC.",
+    name: "On-chain anchor",
+    category: "Tamper-evident baseline",
+    description: "Behavioral baseline is hashed and committed on-chain. Quietly raising the threshold is impossible without leaving a permanent record.",
   },
   {
     name: "Hardhat",

@@ -350,11 +350,20 @@ export type GateResponse = {
 };
 
 export async function postGate(body: GateRequestBody): Promise<GateResponse> {
-  return apiJson<GateResponse>("/api/gate", {
+  // Backend returns HTTP 403 with a valid GateResponse body when agent is frozen/revoked.
+  // Treat any response with a `verdict` field as a valid result, not an error.
+  const res = await fetch(`${getApiBase()}/api/gate`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),
   });
+  const text = await res.text();
+  let parsed: unknown = null;
+  try { parsed = JSON.parse(text); } catch { /* not json */ }
+  if (parsed && typeof parsed === "object" && "verdict" in (parsed as Record<string, unknown>)) {
+    return parsed as GateResponse;
+  }
+  throw new Error(text || `${res.status} ${res.statusText}`);
 }
 
 export type RegisterAgentBody = {
@@ -368,18 +377,27 @@ export type RegisterAgentBody = {
   description?: string;
   passportDid?: string;
   passportUsername?: string;
+  walletTxHash?: string;
 };
 
-export async function postReauthorizeAgent(agentId: string): Promise<{ ok: boolean; agentId: string }> {
-  return apiJson(`/api/agents/${encodeURIComponent(agentId)}/reauthorize`, { method: "POST" });
+export async function postReauthorizeAgent(agentId: string, walletTxHash?: string | null): Promise<{ ok: boolean; agentId: string }> {
+  return apiJson(`/api/agents/${encodeURIComponent(agentId)}/reauthorize`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(walletTxHash ? { walletTxHash } : {}),
+  });
 }
 
 export async function postFreezeAgent(agentId: string): Promise<{ ok: boolean; agentId: string }> {
   return apiJson(`/api/agents/${encodeURIComponent(agentId)}/freeze`, { method: "POST" });
 }
 
-export async function postRevokeAgent(agentId: string): Promise<{ ok: boolean; agentId: string }> {
-  return apiJson(`/api/agents/${encodeURIComponent(agentId)}/revoke`, { method: "POST" });
+export async function postRevokeAgent(agentId: string, walletTxHash?: string | null): Promise<{ ok: boolean; agentId: string }> {
+  return apiJson(`/api/agents/${encodeURIComponent(agentId)}/revoke`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(walletTxHash ? { walletTxHash } : {}),
+  });
 }
 
 export async function postInjectAttack(agentId: string): Promise<{ ok: boolean; txHash?: string; explorerLink?: string }> {

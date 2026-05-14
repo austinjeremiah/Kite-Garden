@@ -16,10 +16,32 @@ import {
   postGate,
   postReauthorizeAgent,
   postRevokeAgent,
+  postFreezeAgent,
   type GateResponse,
 } from "@/lib/api";
 import { fetchAgentPayments, type GoldskyPayment } from "@/lib/goldsky";
 import { explorerTx } from "@/lib/config";
+import { useWeb3Auth } from "@web3auth/modal/react";
+import { walletRevoke, walletReauthorize, walletTransferNative } from "@/lib/wallet-tx";
+
+/** Extract a friendly error message from a backend JSON error or raw revert reason. */
+function prettyError(e: unknown): string {
+  const raw = e instanceof Error ? e.message : String(e);
+  // Backend response may be a JSON blob — try to extract { error: "..." }
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed?.error) {
+      const msg = String(parsed.error);
+      const reasonMatch = msg.match(/execution reverted:\s*\\?"([^"\\]+)\\?"/);
+      if (reasonMatch) return reasonMatch[1];
+      return msg.length > 160 ? msg.slice(0, 160) + "…" : msg;
+    }
+  } catch { /* not json */ }
+  // Plain revert reason inside the string
+  const m = raw.match(/execution reverted:\s*"?([^"\\]+)"?/);
+  if (m) return m[1];
+  return raw.length > 160 ? raw.slice(0, 160) + "…" : raw;
+}
 
 // ─── Session key countdown ────────────────────────────────────────────────────
 
@@ -36,17 +58,25 @@ function SessionCountdown({ expiresAt }: { expiresAt: string }) {
     return () => clearInterval(t);
   }, [expiresAt]);
 
-  const pct = (remaining / 60) * 100;
-  const color = remaining > 20 ? "text-green-400" : remaining > 8 ? "text-amber-400" : "text-red-400";
-  const barColor = remaining > 20 ? "bg-green-500" : remaining > 8 ? "bg-amber-500" : "bg-red-500";
+  // Session keys are valid for 24h (86400s); show progress over the full window, capped to [0, 100]
+  const total = 86400;
+  const pct = Math.min(100, Math.max(0, (remaining / total) * 100));
+  const color = remaining > 600 ? "text-green-400" : remaining > 60 ? "text-amber-400" : "text-red-400";
+  const barColor = remaining > 600 ? "bg-green-500" : remaining > 60 ? "bg-amber-500" : "bg-red-500";
+
+  function formatRemaining(s: number) {
+    if (s >= 3600) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+    if (s >= 60) return `${Math.floor(s / 60)}m ${s % 60}s`;
+    return `${s}s`;
+  }
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <span className="text-xs font-mono text-white/40">Expires in</span>
-        <span className={`font-mono font-bold text-lg tabular-nums ${color}`}>{remaining}s</span>
+        <span className={`font-mono font-bold text-lg tabular-nums ${color}`}>{formatRemaining(remaining)}</span>
       </div>
-      <div className="h-1 w-full bg-white/10">
+      <div className="h-1 w-full bg-white/10 overflow-hidden">
         <div
           className={`h-full transition-all duration-1000 ${barColor}`}
           style={{ width: `${pct}%` }}
@@ -132,14 +162,17 @@ function AmountChart({ data }: { data: { index: number; amount: number }[] }) {
 export default function AgentDetailPage() {
   const { agentId } = useParams<{ agentId: string }>();
   const router = useRouter();
+  const { provider: walletProvider } = useWeb3Auth();
   const [gateRefresh, setGateRefresh] = useState(0);
-  const [gateAmount, setGateAmount] = useState("1");
-  const [gateDestination, setGateDestination] = useState("0x0000000000000000000000000000000000000001");
+  const [gateAmount, setGateAmount] = useState("0.001");
+  const [gateDestination, setGateDestination] = useState("0xe01Add0c3640a8314132bAF491d101A38ffEF4f0");
   const [gateBusy, setGateBusy] = useState(false);
   const [gateResult, setGateResult] = useState<GateResponse | null>(null);
   const [gateErr, setGateErr] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionErr, setActionErr] = useState<string | null>(null);
+  const [paymentTxHash, setPaymentTxHash] = useState<string | null>(null);
+  const [paymentPending, setPaymentPending] = useState(false);
   const [payments, setPayments] = useState<GoldskyPayment[]>([]);
 
   useEffect(() => {
@@ -187,12 +220,14 @@ export default function AgentDetailPage() {
 
   const { agent, metricHistory, txHistory, sessionKey, freezeReason } = detail;
   const ceiling = parseFloat((agent.baselineMean + agent.baselineStdDev * 2).toFixed(3));
+  const hasMetric = agent.currentMetric > 0;
   const metricLabel = agent.mode === "mature" ? "D₂ corr_dim" : "SampEn";
   const amountData = txHistory.map((tx, i) => ({ index: i, amount: tx.amount }));
 
   async function runGate() {
     setGateErr(null);
     setGateResult(null);
+    setPaymentTxHash(null);
     const n = Number(gateAmount);
     if (!Number.isFinite(n) || !gateDestination.trim()) {
       setGateErr("Enter a valid amount and destination address.");
@@ -207,8 +242,16 @@ export default function AgentDetailPage() {
       });
       setGateResult(res);
       setGateRefresh((x) => x + 1);
+
+      // On ISSUED: fire a real native KITE transfer from the connected wallet
+      if (res.verdict === "ISSUED") {
+        setPaymentPending(true);
+        const txHash = await walletTransferNative(walletProvider, gateDestination.trim(), n);
+        if (txHash) setPaymentTxHash(txHash);
+        setPaymentPending(false);
+      }
     } catch (e) {
-      setGateErr(e instanceof Error ? e.message : String(e));
+      setGateErr(prettyError(e));
     } finally {
       setGateBusy(false);
     }
@@ -218,10 +261,11 @@ export default function AgentDetailPage() {
     setActionErr(null);
     setActionBusy(true);
     try {
-      await postReauthorizeAgent(agent.agentId);
+      const walletTxHash = await walletReauthorize(walletProvider, agent.agentId);
+      await postReauthorizeAgent(agent.agentId, walletTxHash);
       setGateRefresh((x) => x + 1);
     } catch (e) {
-      setActionErr(e instanceof Error ? e.message : String(e));
+      setActionErr(prettyError(e));
     } finally {
       setActionBusy(false);
     }
@@ -231,10 +275,24 @@ export default function AgentDetailPage() {
     setActionErr(null);
     setActionBusy(true);
     try {
-      await postRevokeAgent(agent.agentId);
+      const walletTxHash = await walletRevoke(walletProvider, agent.agentId);
+      await postRevokeAgent(agent.agentId, walletTxHash);
       setGateRefresh((x) => x + 1);
     } catch (e) {
-      setActionErr(e instanceof Error ? e.message : String(e));
+      setActionErr(prettyError(e));
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function freeze() {
+    setActionErr(null);
+    setActionBusy(true);
+    try {
+      await postFreezeAgent(agent.agentId);
+      setGateRefresh((x) => x + 1);
+    } catch (e) {
+      setActionErr(prettyError(e));
     } finally {
       setActionBusy(false);
     }
@@ -356,10 +414,11 @@ export default function AgentDetailPage() {
               <div className="flex flex-col gap-1">
                 <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-widest">{metricLabel}</span>
                 <span className={`text-5xl font-mono font-bold tabular-nums ${
+                  !hasMetric ? "text-white/40" :
                   agent.status === "frozen" ? "text-red-400" :
                   Math.abs(agent.deviationPct) < 20 ? "text-green-400" : "text-amber-400"
                 }`}>
-                  {agent.currentMetric.toFixed(3)}
+                  {hasMetric ? agent.currentMetric.toFixed(3) : "—"}
                 </span>
               </div>
               <div className="flex flex-col gap-2 mt-1">
@@ -375,12 +434,16 @@ export default function AgentDetailPage() {
                 </div>
                 <div className="flex items-center gap-3 text-xs font-mono">
                   <span className="text-white/40">deviation</span>
-                  <span className={`font-bold ${
-                    Math.abs(agent.deviationPct) < 20 ? "text-green-400" :
-                    Math.abs(agent.deviationPct) < 50 ? "text-amber-400" : "text-red-400"
-                  }`}>
-                    {agent.deviationPct > 0 ? "+" : ""}{agent.deviationPct.toFixed(1)}%
-                  </span>
+                  {hasMetric ? (
+                    <span className={`font-bold ${
+                      Math.abs(agent.deviationPct) < 20 ? "text-green-400" :
+                      Math.abs(agent.deviationPct) < 50 ? "text-amber-400" : "text-red-400"
+                    }`}>
+                      {agent.deviationPct > 0 ? "+" : ""}{agent.deviationPct.toFixed(1)}%
+                    </span>
+                  ) : (
+                    <span className="text-white/40">not measured yet</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -404,39 +467,36 @@ export default function AgentDetailPage() {
           {/* RIGHT — gate + session key + tx */}
           <div className="flex flex-col gap-4">
 
-            {/* Behavioral gate — calls POST /api/gate */}
-            <div className="border border-[#eca8d6]/25 bg-black/40 backdrop-blur-sm p-6 flex flex-col gap-3">
-              <div className="flex items-start gap-2">
-                <Shield className="w-4 h-4 text-[#eca8d6]/80 shrink-0 mt-0.5" />
-                <div className="flex flex-col gap-1 min-w-0">
-                  <span className="text-[10px] font-mono font-bold text-white/50 uppercase tracking-widest">
-                    Behavioral gate
-                  </span>
-                  <p className="text-[10px] font-mono text-white/35 leading-relaxed">
-                    Each gate run loads payments for this agent (Goldsky), computes the attractor metric (Python),
-                    compares it to the baseline, then returns <span className="text-white/55">ISSUED</span> or{" "}
-                    <span className="text-white/55">DENIED</span>. On <span className="text-white/55">ISSUED</span> it
-                    records a session key and writes <span className="text-white/55">logDecision</span> on-chain — the
-                    same step your app would trigger when a real spend is requested.
-                  </p>
-                </div>
+            {/* Behavioral gate */}
+            <div className="border border-[#eca8d6]/25 bg-black/40 backdrop-blur-sm p-6 flex flex-col gap-4">
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-[#eca8d6]" />
+                <span className="text-xs font-mono font-bold text-white uppercase tracking-widest">
+                  Request a session key
+                </span>
               </div>
-              <div className="grid grid-cols-1 gap-2">
-                <label className="flex flex-col gap-0.5">
-                  <span className="text-[9px] font-mono text-white/40">Amount (USDC)</span>
-                  <input
-                    value={gateAmount}
-                    onChange={(e) => setGateAmount(e.target.value)}
-                    className="bg-black/50 border border-white/15 px-2 py-1.5 font-mono text-xs text-white"
-                    inputMode="decimal"
-                  />
+              <p className="text-xs font-mono text-white/55 leading-relaxed">
+                Simulate a payment. The gate checks the agent's behavioral fingerprint and either issues a session key or freezes the agent.
+              </p>
+              <div className="grid grid-cols-1 gap-3">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] font-mono text-white/60 uppercase tracking-wider">Amount</span>
+                  <div className="flex items-center bg-black/50 border border-white/15 focus-within:border-white/40 transition-colors">
+                    <input
+                      value={gateAmount}
+                      onChange={(e) => setGateAmount(e.target.value)}
+                      className="flex-1 bg-transparent px-3 py-2 font-mono text-sm text-white outline-none"
+                      inputMode="decimal"
+                    />
+                    <span className="px-3 py-2 border-l border-white/15 font-mono text-xs text-white/50">KITE</span>
+                  </div>
                 </label>
-                <label className="flex flex-col gap-0.5">
-                  <span className="text-[9px] font-mono text-white/40">Destination</span>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[10px] font-mono text-white/60 uppercase tracking-wider">Destination</span>
                   <input
                     value={gateDestination}
                     onChange={(e) => setGateDestination(e.target.value)}
-                    className="bg-black/50 border border-white/15 px-2 py-1.5 font-mono text-[10px] text-white"
+                    className="bg-black/50 border border-white/15 focus:border-white/40 transition-colors px-3 py-2 font-mono text-[11px] text-white outline-none"
                     placeholder="0x…"
                   />
                 </label>
@@ -445,9 +505,9 @@ export default function AgentDetailPage() {
                 type="button"
                 onClick={() => void runGate()}
                 disabled={gateBusy || agent.status === "revoked"}
-                className="border border-[#eca8d6]/40 bg-[#eca8d6]/15 text-[#eca8d6] font-mono font-bold text-xs py-2.5 hover:bg-[#eca8d6]/25 disabled:opacity-40 flex items-center justify-center gap-2"
+                className="border border-[#eca8d6]/50 bg-[#eca8d6]/15 text-[#eca8d6] font-mono font-bold text-sm py-3 hover:bg-[#eca8d6]/25 disabled:opacity-40 flex items-center justify-center gap-2"
               >
-                {gateBusy ? "Running gate…" : "Run gate (POST /api/gate)"}
+                {gateBusy ? "Checking behavior…" : "Run gate →"}
               </button>
               {gateErr && (
                 <p className="text-[10px] font-mono text-red-400/90 whitespace-pre-wrap break-words">{gateErr}</p>
@@ -485,8 +545,26 @@ export default function AgentDetailPage() {
                       rel="noopener noreferrer"
                       className="text-[#eca8d6] hover:underline inline-flex items-center gap-1"
                     >
-                      Explorer <ExternalLink className="w-3 h-3" />
+                      Gate decision on Kitescan <ExternalLink className="w-3 h-3" />
                     </a>
+                  )}
+                  {paymentPending && (
+                    <p className="text-amber-400/80 mt-1">
+                      Firing real KITE transfer from your wallet…
+                    </p>
+                  )}
+                  {paymentTxHash && (
+                    <div className="mt-1 pt-1 border-t border-white/10">
+                      <p className="text-green-400 font-bold">Real KITE sent on-chain ✓</p>
+                      <a
+                        href={explorerTx(paymentTxHash)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#eca8d6] hover:underline inline-flex items-center gap-1"
+                      >
+                        View payment tx <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
                   )}
                 </div>
               )}
@@ -494,53 +572,44 @@ export default function AgentDetailPage() {
 
             {/* Session key panel */}
             <div className="border border-white/25 bg-black/40 backdrop-blur-sm p-6 flex flex-col gap-4">
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] font-mono font-bold text-white/50 uppercase tracking-widest">Session key</span>
-                <p className="text-[9px] font-mono text-white/25 leading-relaxed">
-                  Keys come from gate <span className="text-white/40">ISSUED</span> events (
-                  <a href={KITE_CORE_CONCEPTS_DOC_URL} target="_blank" rel="noopener noreferrer" className="text-[#eca8d6]/80 hover:underline">
-                    Kite session keys
-                  </a>
-                  ; AA batching:{" "}
-                  <a href={KITE_AA_SDK_DOC_URL} target="_blank" rel="noopener noreferrer" className="text-[#eca8d6]/80 hover:underline">
-                    AA SDK
-                  </a>
-                  ).
-                </p>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-mono font-bold text-white uppercase tracking-widest">Session key</span>
+                {sessionKey && (
+                  <span className="text-[10px] font-mono text-green-400 inline-flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                    active
+                  </span>
+                )}
               </div>
 
               {sessionKey ? (
                 <>
                   <div className="grid grid-cols-2 gap-3 text-xs font-mono">
                     <div className="flex flex-col gap-1">
-                      <span className="text-white/40">Address</span>
-                      <span className="text-white/70 font-semibold truncate">{sessionKey.address}</span>
+                      <span className="text-[10px] text-white/50 uppercase tracking-wider">Key address</span>
+                      <span className="text-white font-semibold truncate">{sessionKey.address}</span>
                     </div>
                     <div className="flex flex-col gap-1">
-                      <span className="text-white/40">Value limit</span>
-                      <span className="text-white/70 font-semibold">{sessionKey.valueLimit} USDC</span>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-white/40">Selector</span>
-                      <span className="text-white/70 font-semibold">{sessionKey.functionSelector}</span>
+                      <span className="text-[10px] text-white/50 uppercase tracking-wider">Spend limit</span>
+                      <span className="text-white font-semibold">{sessionKey.valueLimit} USDC</span>
                     </div>
                   </div>
                   <SessionCountdown expiresAt={sessionKey.expiresAt} />
                   <button
-                    onClick={() => void revoke()}
+                    onClick={() => void freeze()}
                     disabled={actionBusy}
-                    className="w-full border border-red-500/30 text-red-400 font-mono font-bold text-xs py-2.5 hover:bg-red-500/10 transition-colors disabled:opacity-40"
+                    className="w-full border border-red-500/40 text-red-400 font-mono font-bold text-xs py-3 hover:bg-red-500/10 transition-colors disabled:opacity-40"
                   >
-                    {actionBusy ? "Processing…" : "Force Freeze"}
+                    {actionBusy ? "Freezing…" : "Force freeze"}
                   </button>
                 </>
               ) : (
-                <div className="flex flex-col gap-1">
-                  <span className="font-mono text-xs text-red-400 font-semibold">No active session key</span>
-                  <span className="font-mono text-[10px] text-white/30 leading-relaxed">
+                <div className="flex flex-col gap-2">
+                  <span className="font-mono text-sm text-red-400 font-semibold">No active session key</span>
+                  <span className="font-mono text-xs text-white/60 leading-relaxed">
                     {agent.status === "frozen"
-                      ? "Agent is frozen — re-authorize on-chain to resume."
-                      : "Appears after an ISSUED gate decision. Run POST /api/gate for this agent; if keys stay empty, set STUB_SESSION_KEY_ADDRESS (non-zero) or wire AA session-key issuance in the backend."}
+                      ? "Agent is frozen. Re-authorize below to resume payments."
+                      : "Run the gate to request a session key for this agent."}
                   </span>
                 </div>
               )}

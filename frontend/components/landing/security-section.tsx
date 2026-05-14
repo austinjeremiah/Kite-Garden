@@ -17,7 +17,7 @@ const analysisFeatures = [
   },
   {
     title: "On-chain baseline hash",
-    description: "Baseline parameters are hashed and committed to AgentRegistry.sol. Any quiet alteration produces a new on-chain transaction — visible, timestamped, permanent.",
+    description: "The baseline parameters are hashed and committed on-chain, anchored to the agent's Kite Passport DID. Any quiet alteration produces a new transaction — visible, timestamped, permanent.",
   },
 ];
 
@@ -87,7 +87,7 @@ export function SecuritySection() {
                   {activeFeature < 2 ? "corr_dim" : activeFeature === 2 ? "sampen" : "baseline_hash"}
                 </span>
                 <span className="block text-muted-foreground font-mono text-sm mt-2">
-                  {activeFeature < 2 ? "≥200 transactions — mature agent" : activeFeature === 2 ? "<200 transactions — early-stage agent" : "committed to AgentRegistry.sol"}
+                  {activeFeature < 2 ? "≥200 transactions — mature agent" : activeFeature === 2 ? "<200 transactions — early-stage agent" : "anchored to the agent's Passport DID"}
                 </span>
               </div>
             </div>

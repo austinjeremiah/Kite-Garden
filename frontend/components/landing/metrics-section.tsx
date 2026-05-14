@@ -330,8 +330,8 @@ export function MetricsSection() {
         }`}>
           <span>Takens (1981) — delay embedding</span>
           <span>Grassberger-Procaccia (1983) — correlation dimension</span>
-          <span>nolds.sampen() — early-stage agents</span>
-          <span className="text-foreground">nolds.corr_dim() — mature agents</span>
+          <span>Sample entropy — early-stage agents</span>
+          <span className="text-foreground">Correlation dimension — mature agents</span>
         </div>
       </div>
     </section>

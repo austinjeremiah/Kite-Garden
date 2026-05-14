@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
+import { useWeb3Auth } from "@web3auth/modal/react";
 import { postRegisterAgent, fetchBackendConfig } from "@/lib/api";
 import { truncateId } from "@/lib/mock-data";
+import { walletRegister } from "@/lib/wallet-tx";
 import { ExternalLink, CheckCircle, Info } from "lucide-react";
 
 // ─── DID helpers ─────────────────────────────────────────────────────────────
@@ -39,6 +41,7 @@ function isAddress(s: string): boolean {
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { provider: walletProvider } = useWeb3Auth();
 
   // Form state
   const [passportUsername, setPassportUsername] = useState("");
@@ -108,6 +111,9 @@ export default function RegisterPage() {
 
     setBusy(true);
     try {
+      // Try wallet-signed registration first — silent fallback to backend env key
+      const walletTxHash = await walletRegister(walletProvider, agentLabel.trim(), lim, th);
+
       const res = await postRegisterAgent({
         name: agentLabel.trim(),           // short label = display name
         walletAddress: walletAddress.trim(),
@@ -117,6 +123,7 @@ export default function RegisterPage() {
         didLabel: agentLabel.trim().slice(0, 31),
         passportDid: fullDid || undefined,
         passportUsername: passportUsername.trim() || undefined,
+        ...(walletTxHash ? { walletTxHash } : {}),
         ...(description.trim() ? { description: description.trim() } : {}),
       });
       setOk(res);

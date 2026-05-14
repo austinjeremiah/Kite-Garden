@@ -13,7 +13,7 @@ const gateFeatures = [
   },
   {
     title: "On-chain audit log",
-    description: "Every gate decision emits a SessionKeyIssued or SessionKeyDenied event via AttractorGuard.sol.",
+    description: "Every gate decision — issue, deny, freeze, re-authorize — is anchored to the agent's Kite Passport DID and indexed in real time.",
   },
   {
     title: "60-second session keys",

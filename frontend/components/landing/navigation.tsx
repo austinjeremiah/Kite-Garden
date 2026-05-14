@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useWeb3Auth, useWeb3AuthConnect } from "@web3auth/modal/react";
 import { Button } from "@/components/ui/button";
 import { Menu, X } from "lucide-react";
+import { WalletConnectButton } from "@/components/wallet-connect-button";
 
 const navLinks = [
   { name: "Problem",      href: "#problem"       },
@@ -15,6 +18,19 @@ const navLinks = [
 export function Navigation() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const router = useRouter();
+  const { isConnected } = useWeb3Auth();
+  const { connect } = useWeb3AuthConnect();
+
+  const handleRegisterClick = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (isConnected) {
+      router.push("/register");
+    } else {
+      await connect();
+      router.push("/register");
+    }
+  };
 
   useEffect(() => {
     const handleScroll = () => {
@@ -66,15 +82,16 @@ export function Navigation() {
 
           {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-4">
+            <WalletConnectButton variant={isScrolled ? "dark" : "dark"} />
             <a href="/dashboard" className={`transition-all duration-500 font-mono ${isScrolled ? "text-xs text-foreground/70 hover:text-foreground" : "text-sm text-white/70 hover:text-white"}`}>
               Dashboard
             </a>
             <Button
               size="sm"
-              asChild
+              onClick={handleRegisterClick}
               className={`rounded-full transition-all duration-500 font-mono ${isScrolled ? "bg-foreground hover:bg-foreground/90 text-background px-4 h-8 text-xs" : "bg-white hover:bg-white/90 text-black px-6"}`}
             >
-              <a href="/register">Register agent</a>
+              Register agent
             </Button>
           </div>
 
@@ -141,10 +158,9 @@ export function Navigation() {
             </Button>
             <Button
               className="flex-1 bg-foreground text-background rounded-full h-14 text-base font-mono"
-              onClick={() => setIsMobileMenuOpen(false)}
-              asChild
+              onClick={(e) => { setIsMobileMenuOpen(false); void handleRegisterClick(e); }}
             >
-              <a href="/register">Register agent</a>
+              Register agent
             </Button>
           </div>
         </div>

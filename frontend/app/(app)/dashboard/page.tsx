@@ -164,7 +164,6 @@ export default function DashboardPage() {
       <div className="px-8 py-5 border-b border-white/25 flex items-center justify-between shrink-0">
         <div>
           <h1 className="font-mono font-bold text-white text-lg">Dashboard</h1>
-          <p className="font-mono text-white/40 text-xs mt-0.5">Behavioral gate · Kite testnet</p>
         </div>
         <div className="flex items-center gap-3 text-xs font-mono font-bold text-white/40">
           {isError && (

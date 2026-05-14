@@ -143,7 +143,6 @@ export function InfrastructureSection() {
                 <span className="text-2xl text-muted-foreground">contracts</span>
               </div>
               <p className="text-muted-foreground max-w-md font-mono text-sm">
-                AgentRegistry · AttractorGuard · AgentPaymentSimulator<br />
                 All deployed on Kite AI testnet. All indexed by Goldsky.
               </p>
             </div>
