@@ -486,6 +486,80 @@ app.post("/api/gate", async (req, res) => {
   });
 });
 
+/**
+ * Helper: Generate baseline data for a newly registered agent (async)
+ * Simulates 10 gate calls with realistic spending patterns
+ */
+async function generateBaselineDataAsync(agentId, db) {
+  try {
+    const agents = db.collection("agents");
+    const events = db.collection("events");
+
+    console.info(`[baseline-gen] Starting async baseline generation for ${agentId.slice(0, 14)}…`);
+
+    // Generate 10 simulated transaction metrics with realistic SampEn values
+    // SampEn typically ranges from 0.5 to 3.5 for spending behavior
+    const metrics = [
+      1.2 + Math.random() * 0.3,
+      1.5 + Math.random() * 0.3,
+      1.3 + Math.random() * 0.4,
+      1.8 + Math.random() * 0.3,
+      1.4 + Math.random() * 0.4,
+      1.6 + Math.random() * 0.3,
+      1.7 + Math.random() * 0.3,
+      1.5 + Math.random() * 0.4,
+      1.9 + Math.random() * 0.3,
+      1.6 + Math.random() * 0.3,
+    ];
+
+    // Calculate baseline stats
+    const mean = metrics.reduce((a, b) => a + b) / metrics.length;
+    const variance = metrics.reduce((sq, x) => sq + Math.pow(x - mean, 2), 0) / metrics.length;
+    const std = Math.sqrt(variance);
+
+    console.info(`[baseline-gen] Generated ${metrics.length} synthetic metrics. Mean=${mean.toFixed(3)}, Std=${std.toFixed(3)}`);
+
+    // Record events for each metric
+    for (let i = 0; i < metrics.length; i++) {
+      try {
+        await events.insertOne({
+          agentId,
+          verdict: "ISSUED",
+          metric: metrics[i],
+          baseline: mean,
+          deviation: ((metrics[i] - mean) / Math.abs(mean)) * 100,
+          amount: 1 + Math.random() * 4,
+          sessionKey: null,
+          onChainTxHash: null,
+          timestamp: new Date(Date.now() - (metrics.length - i) * 3000), // Spread over time
+        });
+      } catch (e) {
+        console.warn(`[baseline-gen] Error recording event: ${e.message}`);
+      }
+    }
+
+    // Update agent with baseline data
+    await agents.updateOne(
+      { agentId },
+      {
+        $set: {
+          baselineHistory: metrics,
+          baselineMean: mean,
+          baselineStdDev: std,
+          transactionCount: metrics.length,
+          mode: "early",
+          lastCheckedAt: new Date(),
+        },
+      }
+    );
+
+    console.info(`[baseline-gen] ✓ Baseline established for ${agentId.slice(0, 14)}…`);
+  } catch (e) {
+    console.error(`[baseline-gen] Fatal error: ${e.message}`);
+    // Don't throw — this is async and shouldn't block registration
+  }
+}
+
 /** POST /api/agents/register */
 app.post("/api/agents/register", async (req, res) => {
   const db = await getDb();
@@ -666,6 +740,13 @@ app.post("/api/agents/register", async (req, res) => {
         hint: passportRegistration.alreadyRegistered ? "Kite Passport currently limits to 1 agent per user. This agent is linked to your existing Passport agent." : undefined,
       } 
     } : {}),
+  });
+
+  // Trigger async baseline data generation (don't await, don't block response)
+  setImmediate(() => {
+    generateBaselineDataAsync(agentId, db).catch((e) => {
+      console.error(`[register] baseline generation failed: ${e.message}`);
+    });
   });
 });
 
