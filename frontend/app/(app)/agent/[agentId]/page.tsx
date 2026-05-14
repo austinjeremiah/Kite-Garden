@@ -269,31 +269,58 @@ export default function AgentDetailPage() {
       <div className="flex-1 p-8 flex flex-col gap-6">
 
         {/* Agent header info */}
-        <div className="border border-white/25 bg-black/40 backdrop-blur-sm p-6 grid grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-widest">Agent ID</span>
-            <span className="font-mono text-xs text-white/70 break-all">{truncateId(agent.agentId, 10)}</span>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-widest">Owner</span>
-            <span className="font-mono text-xs text-white/70 break-all">{agent.ownerAddress}</span>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-widest">Mode</span>
-            <span className="font-mono text-xs text-white/70">
-              {agent.mode === "mature" ? `mature · corr_dim (${agent.transactionCount} tx)` : `early · sampen (${agent.transactionCount} tx)`}
-            </span>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-widest">Baseline hash</span>
-            <a
-              href="https://testnet.kitescan.ai"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-mono text-xs text-[#eca8d6] hover:text-[#eca8d6]/80 flex items-center gap-1 transition-colors"
-            >
-              {agent.baselineHash} <ExternalLink className="w-3 h-3" />
-            </a>
+        <div className="border border-white/25 bg-black/40 backdrop-blur-sm p-6 flex flex-col gap-5">
+
+          {/* Passport DID banner — shown when registered with Kite Passport */}
+          {agent.passportDid && (
+            <div className="border border-[#eca8d6]/20 bg-[#eca8d6]/5 px-4 py-3 flex items-center gap-3">
+              <Shield className="w-4 h-4 text-[#eca8d6]/60 shrink-0" />
+              <div className="flex flex-col gap-0.5 min-w-0">
+                <span className="text-[9px] font-mono font-bold text-[#eca8d6]/50 uppercase tracking-widest">Kite Passport DID</span>
+                <code className="font-mono text-xs text-[#eca8d6] break-all">{agent.passportDid}</code>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-widest">Agent ID (bytes32)</span>
+              <span className="font-mono text-xs text-white/70 break-all">{truncateId(agent.agentId, 10)}</span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-widest">Owner</span>
+              <span className="font-mono text-xs text-white/70 break-all">{truncateId(agent.ownerAddress, 8)}</span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-widest">Mode</span>
+              <span className="font-mono text-xs text-white/70">
+                {agent.mode === "mature" ? `mature · corr_dim (${agent.transactionCount} tx)` : `early · sampen (${agent.transactionCount} tx)`}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-mono font-bold text-white/40 uppercase tracking-widest">Baseline hash</span>
+              {agent.baselineHash && agent.baselineHash !== "—" ? (
+                agent.baselineExplorerLink ? (
+                  <a
+                    href={agent.baselineExplorerLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-xs text-[#eca8d6] hover:text-[#eca8d6]/80 flex items-center gap-1 transition-colors break-all"
+                  >
+                    {agent.baselineHash.slice(0, 14)}… <ExternalLink className="w-3 h-3 shrink-0" />
+                  </a>
+                ) : (
+                  <span className="font-mono text-xs text-[#eca8d6]/70 break-all">
+                    {agent.baselineHash.slice(0, 14)}…
+                    <span className="text-white/25 text-[9px] ml-1">(pending explorer link)</span>
+                  </span>
+                )
+              ) : (
+                <span className="font-mono text-xs text-white/25 italic">
+                  pending first gate call
+                </span>
+              )}
+            </div>
           </div>
         </div>
 

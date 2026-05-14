@@ -17,6 +17,9 @@ export interface Agent {
   baselineStdDev: number;
   deviationPct: number;
   baselineHash: string;
+  baselineExplorerLink?: string | null;
+  passportDid?: string | null;
+  passportUsername?: string | null;
   lastCheckedAt: string;
 }
 

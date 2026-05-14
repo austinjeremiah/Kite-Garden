@@ -63,7 +63,7 @@ When the agent is compromised or misbehaving, its transaction pattern changes. T
 
 When a shape shift is detected, Kite Garden does one thing: it does not issue the next Kite session key. Since session keys expire every 60 seconds, a refused renewal is a cryptographic freeze. The agent cannot make another payment until a human reviews and re-authorizes.
 
-Agent identity in Kite Garden is anchored by a **Kite Agent Passport** — the official DID system for autonomous agents on Kite. Each agent has a unique Passport DID (format: `did:kite:username.eth/agenttype/name-v1`) created through the Kite Portal. The behavioral baseline for that agent is hashed and committed to the `AttractorGuard` contract on Kite L1 testnet — making the threshold tamper-evident and permanently auditable. This means the entire lifecycle of an agent — registration via Passport, baseline commitment, anomaly detection, freeze — is visible on the Kite block explorer with the Passport as the cryptographic anchor.
+Agent identity in Kite Garden is anchored by a **Kite Agent Passport** — the official DID system for autonomous agents on Kite. Each agent has a unique Passport DID (format: `did:kite:username.eth/agenttype/name-v1`) automatically registered when you register with Kite Garden. The behavioral baseline for that agent is hashed and committed to the `AttractorGuard` contract on Kite L1 testnet — making the threshold tamper-evident and permanently auditable. This means the entire lifecycle of an agent — registration via Passport, baseline commitment, anomaly detection, freeze — is visible on the Kite block explorer with the Passport as the cryptographic anchor.
 
 **The gate is behavioral, not numerical. The identity is managed by Kite's official Passport system. The baseline commitments are on-chain via AttractorGuard. This is the novel part.**
 
@@ -75,9 +75,24 @@ This is the complete step-by-step flow of what happens every time an AI agent at
 
 ### Step 1 — Agent registers with Kite Agent Passport
 
-Before an agent can interact with Kite Garden, it must have a registered **Kite Agent Passport**. The Passport is created through the **Kite Portal** at <https://x402-portal-eight.vercel.app/>. This produces a unique Passport DID with format `did:kite:username.eth/agenttype/name-v1`. The agent's identity is now cryptographically anchored on Kite.
+Before an agent can interact with Kite Garden, you register it using the **Kite Garden registration form** (or `/api/agents/register` endpoint). The backend automatically handles Passport registration:
 
-When registering the agent with Kite Garden (via the `/api/agents/register` endpoint), the backend stores the Passport DID and creates a baseline record. The `AgentRegistered` event is emitted from the `AttractorGuard` contract. Goldsky indexes this event immediately, linking the Passport DID to the on-chain record.
+1. **Passport Validation**: Backend checks that Kite Passport is authenticated via `kpass status`
+2. **Passport Registration**: Backend calls `kpass agent:register --type <agentLabel>` to create official Passport entry
+3. **Verification**: Backend verifies agent exists in Passport (with retry logic)
+4. **On-Chain Registration**: Backend calls `AttractorGuard.registerAgent()` to register on-chain
+5. **Data Sync**: MongoDB stores both Kite-Garden agentId and Passport agentId
+
+The result is a unique Passport DID with format `did:kite:username/agent/label` tied to your authenticated user. When registering the agent with Kite Garden, the backend stores both the on-chain record and the Passport reference. The `AgentRegistered` event is emitted from the `AttractorGuard` contract. Goldsky indexes this event immediately, linking the Passport DID to the on-chain record.
+
+**Prerequisites:**
+- `kpass` CLI installed and authenticated
+- Agent label (e.g., "trading-bot", "expense-tracker")
+- Wallet address for payments
+
+**Endpoints:**
+- `GET /api/passport/status` — Check Passport authentication and list agents
+- `POST /api/passport/verify` — Verify specific agent in Passport
 
 ### Step 2 — Agent constructs payment intent
 
@@ -211,13 +226,28 @@ Every agent that interacts with Kite Garden must have a registered **Kite Agent 
 
 **Format:** `did:kite:username.eth/agenttype/name-v1`
 
-**Created through:** Kite Portal at https://x402-portal-eight.vercel.app/
+**Registration:** Automatically handled via Kite Passport CLI integration. When you register an agent with Kite Garden, the backend executes `kpass agent:register --type <agentLabel>` to create the official Passport entry.
 
-**Docs:** https://docs.gokite.ai/kite-agent-passport/developer-guide
+**Docs:** https://docs.gokite.ai/kite-agent-passport/cli-reference
 
-The Agent Passport is the cryptographic anchor of the agent's identity on Kite. When an agent registers with Kite Garden, its Passport DID becomes the key used throughout the system to query its transaction history from Goldsky, track its baseline, and receive gate decisions. The Passport ensures that identity is managed by Kite's official system, not by a custom contract.
+**How It Works:**
+1. User submits registration form with agent label and spending parameters
+2. Backend validates Passport authentication status (`kpass status`)
+3. Backend registers agent with Kite Passport (`kpass agent:register --type <label>`)
+4. Backend verifies agent exists in Passport (with retry logic)
+5. Backend registers agent on-chain (AttractorGuard contract)
+6. MongoDB stores both on-chain agentId and Passport agentId for reference
 
-**Note:** Programmatic DID registration API is listed as "coming soon" in Kite docs. For now, agent DIDs are created manually through the Kite Portal before registering with Kite Garden.
+**Verification:**
+- Check Passport integration: `GET /api/passport/status`
+- Verify agent in Passport: `POST /api/passport/verify`
+- List your agents: `kpass user agents --output json`
+
+**Prerequisites:**
+- Kite Passport CLI installed: `npm install -g @kite/passport-cli`
+- Authenticated with Kite Passport: `kpass login`
+
+The Agent Passport is the cryptographic anchor of the agent's identity on Kite. It ensures that identity is managed by Kite's official system, not by a custom contract. When you register an agent in Kite Garden, it is simultaneously registered in the official Kite Passport system for secure, verifiable agent identity.
 
 ### Privy AA Wallet
 
@@ -840,6 +870,171 @@ The full cycle: payment event emitted → Goldsky indexes → backend reads for 
 ### Connection 8 — Agent to Backend
 
 The autonomous agent (simulated in demo as a Node.js script) calls `POST /api/gate` before every payment. If ISSUED, it uses the returned session key to sign the x402 authorization and submit the payment to Kite. If DENIED, it logs and halts.
+
+---
+
+## 11.5 Backend API Reference
+
+### Authentication Endpoints
+
+**`POST /api/passport/status`** — Check Kite Passport Authentication
+```bash
+GET http://localhost:4000/api/passport/status
+```
+
+Response:
+```json
+{
+  "enabled": true,
+  "authenticated": true,
+  "status": "success",
+  "credentials": {
+    "userId": "user_...",
+    "email": "user@example.com",
+    "hasJwt": true
+  },
+  "agentCount": 1,
+  "agents": [
+    {
+      "agentId": "agent_...",
+      "type": "expense",
+      "ownerId": "user_...",
+      "createdAt": "2026-05-06T13:36:09Z"
+    }
+  ]
+}
+```
+
+**`POST /api/passport/verify`** — Verify Agent in Kite Passport
+```bash
+curl -X POST http://localhost:4000/api/passport/verify \
+  -H "Content-Type: application/json" \
+  -d '{"agentType": "trading-bot"}'
+```
+
+Response:
+```json
+{
+  "verified": true,
+  "agent": {
+    "agent_id": "agent_...",
+    "agent_type": "expense"
+  },
+  "attempt": 1
+}
+```
+
+### Registration Endpoints
+
+**`POST /api/agents/register`** — Register Agent (with Passport integration)
+```bash
+curl -X POST http://localhost:4000/api/agents/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "didLabel": "trading-bot",
+    "walletAddress": "0x...",
+    "ownerAddress": "0x...",
+    "spendingLimit": 10,
+    "passportDid": "did:kite:username/agent/trading-bot",
+    "passportUsername": "username",
+    "description": "Trading bot with anomaly detection"
+  }'
+```
+
+Response:
+```json
+{
+  "agentId": "0x7472616469...",
+  "txHash": "0xabc123...",
+  "explorerLink": "https://testnet.kitescan.ai/tx/0xabc123...",
+  "passportAgentId": "agent_...",
+  "passportRegistration": { "success": true }
+}
+```
+
+The registration automatically:
+1. Validates Passport authentication
+2. Registers agent with Kite Passport via `kpass agent:register`
+3. Verifies agent exists in Passport
+4. Registers on-chain in AttractorGuard
+5. Stores Passport agent ID in MongoDB
+
+### Gate Decision Endpoints
+
+**`POST /api/gate`** — Get Gate Decision for Payment
+```bash
+curl -X POST http://localhost:4000/api/gate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agentId": "0x7472616469...",
+    "amount": "1.5",
+    "destination": "0x..."
+  }'
+```
+
+Response (ISSUED):
+```json
+{
+  "verdict": "ISSUED",
+  "sessionKey": "0x...",
+  "metric": 42.5,
+  "baseline": 40.0,
+  "threshold": 60.0,
+  "reason": "Within baseline ±50%"
+}
+```
+
+Response (DENIED):
+```json
+{
+  "verdict": "DENIED",
+  "sessionKey": null,
+  "metric": 150.0,
+  "baseline": 40.0,
+  "threshold": 60.0,
+  "reason": "Anomaly detected: 3.75x baseline"
+}
+```
+
+### Dashboard Endpoints
+
+**`GET /api/agents`** — List All Agents
+```bash
+curl http://localhost:4000/api/agents
+```
+
+**`GET /api/agents/:agentId`** — Get Agent Details
+```bash
+curl http://localhost:4000/api/agents/0x7472616469...
+```
+
+**`GET /api/events`** — Get Recent Gate Decisions (feed)
+```bash
+curl "http://localhost:4000/api/events?limit=50"
+```
+
+### Admin Endpoints
+
+**`GET /health`** — Backend Health Check
+```bash
+curl http://localhost:4000/health
+```
+
+**`GET /api/config`** — Get Backend Configuration
+```bash
+curl http://localhost:4000/api/config
+```
+
+Returns:
+```json
+{
+  "ownerAddress": "0x...",
+  "passportUsername": "username",
+  "explorerBase": "https://testnet.kitescan.ai",
+  "attractorGuardAddress": "0x...",
+  "demoMode": true
+}
+```
 
 ---
 

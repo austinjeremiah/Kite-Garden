@@ -37,6 +37,61 @@ export async function fetchBackendHealth(): Promise<BackendHealth> {
   return apiJson<BackendHealth>("/health");
 }
 
+export type BackendConfig = {
+  ownerAddress: string;
+  walletAddress: string; // Agent's payment wallet (Kite Passport wallet for authenticated owner)
+  passportUsername: string;
+  explorerBase: string;
+  attractorGuardAddress: string;
+  demoMode: boolean;
+};
+
+export async function fetchBackendConfig(): Promise<BackendConfig> {
+  return apiJson<BackendConfig>("/api/config");
+}
+
+export type PassportStatus = {
+  enabled: boolean;
+  authenticated: boolean;
+  status: string;
+  credentials?: {
+    userId: string;
+    email: string;
+    hasJwt: boolean;
+  };
+  agentCount: number;
+  agents: Array<{
+    agentId: string;
+    type: string;
+    ownerId?: string;
+    createdAt?: string;
+  }>;
+  error?: string;
+};
+
+export async function fetchPassportStatus(): Promise<PassportStatus> {
+  return apiJson<PassportStatus>("/api/passport/status");
+}
+
+export type PassportVerification = {
+  verified: boolean;
+  agent?: {
+    agent_id: string;
+    agent_type: string;
+  };
+  attempt?: number;
+  error?: string;
+  skipped?: boolean;
+};
+
+export async function verifyPassportAgent(agentType: string): Promise<PassportVerification> {
+  return apiJson<PassportVerification>("/api/passport/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agentType }),
+  });
+}
+
 async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${getApiBase()}${path.startsWith("/") ? path : `/${path}`}`;
   const res = await fetch(url, {
@@ -66,6 +121,9 @@ type ApiAgentRow = {
   baselineMean: number;
   baselineStdDev: number;
   baselineHash: string | null;
+  baselineExplorerLink?: string | null;
+  passportDid?: string | null;
+  passportUsername?: string | null;
   transactionCount: number;
   currentMetric: number;
   deviationPct: number;
@@ -96,6 +154,9 @@ export function mapListAgent(r: ApiAgentRow): Agent {
     baselineStdDev: Number(r.baselineStdDev) || 0,
     deviationPct: Number(r.deviationPct) || 0,
     baselineHash: r.baselineHash ? String(r.baselineHash) : "—",
+    baselineExplorerLink: r.baselineExplorerLink ?? null,
+    passportDid: r.passportDid ?? null,
+    passportUsername: r.passportUsername ?? null,
     lastCheckedAt: r.lastCheckedAt || new Date().toISOString(),
   };
 }
@@ -196,6 +257,9 @@ export function mapAgentDetail(raw: ApiAgentDetail): AgentDetail {
     baselineStdDev: std,
     deviationPct,
     baselineHash: raw.baselineHash ? String(raw.baselineHash) : "—",
+    baselineExplorerLink: (raw as ApiAgentRow).baselineExplorerLink ?? null,
+    passportDid: (raw as ApiAgentRow).passportDid ?? null,
+    passportUsername: (raw as ApiAgentRow).passportUsername ?? null,
     lastCheckedAt: iso(raw.lastCheckedAt as string | Date | undefined),
   };
 
@@ -302,6 +366,8 @@ export type RegisterAgentBody = {
   agentId?: string;
   didLabel?: string;
   description?: string;
+  passportDid?: string;
+  passportUsername?: string;
 };
 
 export async function postReauthorizeAgent(agentId: string): Promise<{ ok: boolean; agentId: string }> {

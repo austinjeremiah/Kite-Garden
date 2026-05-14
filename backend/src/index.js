@@ -22,10 +22,18 @@ import { fetchAgentPaymentHistory, historyToSeries } from "./goldsky.js";
 import { hashBaselinePayload, isStable, statsForBaseline } from "./gateLogic.js";
 import { analyzeSeries } from "./pythonClient.js";
 import { validateX402Payload } from "./x402.js";
+import PassportCLI from "./passport-cli.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
+
+// Initialize Kite Passport CLI
+const passport = new PassportCLI({
+  enabled: process.env.KITE_PASSPORT_ENABLED !== "false",
+  verbose: process.env.PASSPORT_DEBUG === "true",
+  passportDir: process.env.KITE_PASSPORT_DIR || ".kite-passport",
+});
 
 function normalizeAgentId(raw) {
   if (!raw || typeof raw !== "string") return null;
@@ -66,6 +74,78 @@ app.get("/health", (_req, res) => {
     predictedAaBackendAddress: predictAaBackendAccountAddress(),
   };
   res.json(body);
+});
+
+/** GET /api/config — frontend uses this to auto-fill registration form */
+app.get("/api/config", (_req, res) => {
+  let ownerAddress = "";
+  let walletAddress = "";
+  try {
+    const owner = getOwnerSigner();
+    ownerAddress = owner.address;
+    // Wallet address for agent payments = Kite Passport wallet (if configured) or owner address
+    walletAddress = process.env.KITE_PASSPORT_WALLET || owner.address;
+  } catch {
+    ownerAddress = "";
+    walletAddress = process.env.KITE_PASSPORT_WALLET || "";
+  }
+  res.json({
+    ownerAddress,
+    walletAddress, // Agent's payment wallet = Kite Passport wallet address
+    /** Kite Passport username linked to the owner key (from kpass signup) */
+    passportUsername: process.env.PASSPORT_USERNAME || "syleshrpsa",
+    explorerBase: config.explorerBase,
+    attractorGuardAddress: config.attractorGuardAddress,
+    demoMode: config.demoMode,
+  });
+});
+
+/** GET /api/passport/status — check Kite Passport authentication and list agents */
+app.get("/api/passport/status", async (req, res) => {
+  try {
+    const status = await passport.verifyStatus();
+    const credentials = passport.getStoredCredentials();
+    const agents = status.authenticated ? await passport.listAgents() : [];
+
+    res.json({
+      enabled: passport.enabled,
+      authenticated: status.authenticated,
+      status: status.status,
+      credentials,
+      agentCount: agents.length,
+      agents: agents.map((a) => ({
+        agentId: a.agent_id || a.id,
+        type: a.agent_type || a.type,
+        ownerId: a.owner_id,
+        createdAt: a.created_at,
+      })),
+      ...(status.error ? { error: status.error } : {}),
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to check Passport status",
+      message: error.message,
+    });
+  }
+});
+
+/** POST /api/passport/verify — verify a specific agent exists in Kite Passport */
+app.post("/api/passport/verify", async (req, res) => {
+  const { agentType } = req.body;
+
+  if (!agentType) {
+    return res.status(400).json({ error: "agentType required" });
+  }
+
+  try {
+    const verification = await passport.verifyAgentRegistered(agentType, 3);
+    res.json(verification);
+  } catch (error) {
+    res.status(500).json({
+      verified: false,
+      error: error.message,
+    });
+  }
 });
 
 /** POST /api/gate */
@@ -303,11 +383,15 @@ app.post("/api/gate", async (req, res) => {
   let baselineHash = agent.baselineHash || null;
   /** When false, skip on-chain resetBaseline until re-register/reauthorize. */
   let pendingBaselineCommit = agent.pendingBaselineCommit !== false;
+  let baselineExplorerLink = agent.baselineExplorerLink || null;
 
+  // Commit baseline whenever: gate is ISSUED, Python succeeded, we have at least
+  // one metric point in history (the one we just pushed), and commit is pending.
+  // This covers first-ever commit AND re-commit after a register sync wiped the hash.
   if (
     verdict === "ISSUED" &&
     pythonStatus === "ok" &&
-    !hadBaselineHistory &&
+    baselineHistory.length > 0 &&
     config.agentOwnerPrivateKey &&
     pendingBaselineCommit
   ) {
@@ -322,11 +406,13 @@ app.post("/api/gate", async (req, res) => {
       const owner = getOwnerSigner();
       const ag = getAttractorGuard(owner);
       const tx = await ag.resetBaseline(agentId, scaledMetric(newStats.mean));
-      await tx.wait();
+      const receipt = await tx.wait();
       baselineHash = hashBaselinePayload(commitPayload);
+      baselineExplorerLink = explorerTxUrl(receipt.hash);
       pendingBaselineCommit = false;
+      console.info(`[gate] baseline committed on-chain for ${agentId.slice(0, 14)}… hash=${baselineHash.slice(0, 14)}… tx=${receipt.hash.slice(0, 14)}…`);
     } catch (e) {
-      console.warn("[gate] resetBaseline:", e.message);
+      console.warn("[gate] resetBaseline:", e.shortMessage || e.message);
     }
   }
 
@@ -354,6 +440,7 @@ app.post("/api/gate", async (req, res) => {
           baselineStdDev: newStats.std,
           baselineHistory,
           baselineHash: baselineHash ?? agent.baselineHash,
+          baselineExplorerLink: baselineExplorerLink ?? agent.baselineExplorerLink,
           baselineCommittedAt:
             baselineHash && baselineHash !== agent.baselineHash ? now : agent.baselineCommittedAt,
           pendingBaselineCommit,
@@ -405,17 +492,23 @@ app.post("/api/agents/register", async (req, res) => {
   const agents = db.collection("agents");
 
   const {
-    name,
+    name: rawName,
     walletAddress,
     ownerAddress,
     spendingLimit,
     thresholdMultiplier = 2,
     didLabel,
     agentId: rawAgentId,
+    passportDid,
+    passportUsername,
+    description,
   } = req.body;
 
-  if (!name || !walletAddress || !ownerAddress || spendingLimit == null) {
-    return res.status(400).json({ error: "name, walletAddress, ownerAddress, spendingLimit required" });
+  // Use short label as display name; full DID stored separately as passportDid
+  const name = rawName || didLabel || rawAgentId || "unnamed";
+
+  if (!walletAddress || !ownerAddress || spendingLimit == null) {
+    return res.status(400).json({ error: "walletAddress, ownerAddress, spendingLimit required" });
   }
 
   let agentId = rawAgentId ? normalizeAgentId(rawAgentId) : null;
@@ -444,6 +537,57 @@ app.post("/api/agents/register", async (req, res) => {
     return res.status(400).json({ error: "thresholdMultiplier must map to 1.0–5.0 (100–500 on-chain)" });
   }
 
+  // ── KITE PASSPORT INTEGRATION ────────────────────────────────────────────
+  // Step 1: Verify Passport status before proceeding
+  let passportRegistration = null;
+  let passportAgentId = null;
+
+  const statusCheck = await passport.verifyStatus();
+  if (!statusCheck.authenticated && passport.enabled) {
+    console.warn("[register] Passport not authenticated. Credentials:", passport.getStoredCredentials());
+    
+    // If credentials exist, provide helpful error; otherwise warn but continue
+    if (passport.credentialsExist()) {
+      return res.status(401).json({
+        error: "Kite Passport authentication failed",
+        details: "kpass login may have expired. Run: kpass login",
+        credentials: passport.getStoredCredentials(),
+      });
+    } else {
+      console.warn("[register] No Passport credentials found. Set KITE_PASSPORT_ENABLED=false to skip validation");
+    }
+  }
+
+  // Step 2: Register agent with Kite Passport if enabled and didLabel provided
+  if (passport.enabled && didLabel) {
+    try {
+      console.info(`[register] Registering agent with Kite Passport: ${didLabel}`);
+      passportRegistration = await passport.registerAgent(didLabel);
+      passportAgentId = passportRegistration.passportAgentId;
+      
+      if (passportRegistration.alreadyRegistered) {
+        console.warn(`[register] Passport agent already registered (reusing ID: ${passportAgentId}). Note: Kite Passport currently limits to 1 agent per user.`);
+      } else {
+        console.info(`[register] Passport registration successful: ${passportAgentId}`);
+      }
+
+      // Step 3: Verify agent was registered (retry with backoff)
+      const verification = await passport.verifyAgentRegistered(didLabel, 5);
+      if (!verification.verified && verification.error) {
+        console.warn(`[register] Agent verification inconclusive: ${verification.error}. Proceeding anyway.`);
+      }
+    } catch (e) {
+      const passportError = String(e?.message || e);
+      console.warn(`[register] Passport registration warning (non-fatal): ${passportError}`);
+      
+      // Log but continue — don't fail on-chain registration if Passport has issues
+      if (passportError.includes("not authenticated") || passportError.includes("not found")) {
+        console.warn("[register] Proceeding without Passport registration due to authentication/availability");
+      }
+    }
+  }
+  // ────────────────────────────────────────────────────────────────────────
+
   let txHash = "";
   let explorerLink = "";
   try {
@@ -467,33 +611,62 @@ app.post("/api/agents/register", async (req, res) => {
   }
 
   const now = new Date();
+
+  // Check if agent already exists in MongoDB — preserve its baseline data
+  const existing = await agents.findOne({ agentId });
+  const preserveBaseline = Boolean(existing && (existing.baselineHash || (existing.baselineHistory || []).length > 0));
+
   await agents.updateOne(
     { agentId },
     {
       $set: {
         agentId,
         name,
+        ...(passportDid ? { passportDid } : {}),
+        ...(passportUsername ? { passportUsername } : {}),
+        ...(passportAgentId ? { passportAgentId } : {}),
+        ...(description ? { description } : {}),
         walletAddress: ethers.getAddress(walletAddress),
         ownerAddress: ethers.getAddress(ownerAddress),
         spendingLimit: Number(spendingLimit),
         thresholdMultiplier: Number(thresholdMultiplier),
-        mode: "early",
-        transactionCount: 0,
-        baselineMean: 0,
-        baselineStdDev: 0,
-        baselineHistory: [],
-        baselineHash: null,
-        baselineCommittedAt: null,
-        pendingBaselineCommit: true,
+        // Only reset baseline fields if this is a fresh registration (no prior baseline)
+        ...(preserveBaseline ? {} : {
+          mode: "early",
+          transactionCount: 0,
+          baselineMean: 0,
+          baselineStdDev: 0,
+          baselineHistory: [],
+          baselineHash: null,
+          baselineExplorerLink: null,
+          baselineCommittedAt: null,
+          pendingBaselineCommit: true,
+        }),
         status: "active",
-        createdAt: now,
+        createdAt: existing?.createdAt ?? now,
         lastCheckedAt: now,
       },
     },
     { upsert: true }
   );
 
-  res.json({ agentId, txHash, explorerLink });
+  if (preserveBaseline) {
+    console.info(`[register] preserved existing baseline for ${agentId.slice(0, 14)}…`);
+  }
+
+  res.json({ 
+    agentId, 
+    txHash, 
+    explorerLink,
+    ...(passportAgentId ? { passportAgentId } : {}),
+    ...(passportRegistration ? { 
+      passportRegistration: { 
+        success: true,
+        alreadyRegistered: passportRegistration.alreadyRegistered,
+        hint: passportRegistration.alreadyRegistered ? "Kite Passport currently limits to 1 agent per user. This agent is linked to your existing Passport agent." : undefined,
+      } 
+    } : {}),
+  });
 });
 
 /** GET /api/events — recent gate invocations (dashboard feed) */
@@ -541,6 +714,9 @@ app.get("/api/agents", async (_req, res) => {
       baselineMean: a.baselineMean,
       baselineStdDev: a.baselineStdDev,
       baselineHash: a.baselineHash,
+      baselineExplorerLink: a.baselineExplorerLink || null,
+      passportDid: a.passportDid || null,
+      passportUsername: a.passportUsername || null,
       transactionCount: a.transactionCount,
       lastDecision: last?.verdict ?? null,
       lastMetric: last?.metric ?? null,
