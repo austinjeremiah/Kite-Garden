@@ -202,6 +202,66 @@ The transition from any stable attractor to the **chaotic scatter** state (used 
 
 ---
 
+## Kite Agent Passport integration
+
+KiteGarden uses **Kite Agent Passport** — Kite's official DID system for autonomous agents — as the cryptographic anchor for every agent we register. We don't deploy our own identity contract; we **integrate with Kite's existing Passport infrastructure** via the `kpass` CLI, so every agent in KiteGarden simultaneously exists as a first-class Passport entity.
+
+### DID format
+
+```
+did:kite:<username>/agent/<label-vN>
+```
+
+Example: `did:kite:sellerteni/agent/kite-demo-01`
+
+- `username` — the human owner's Kite Passport identity
+- `label` — the agent's short identifier (max 31 chars, encoded as bytes32 on-chain)
+
+### Registration flow (handled by the backend)
+
+When a user registers an agent through `POST /api/agents/register`:
+
+1. **Passport auth check** — backend runs `kpass status` to verify the operator is authenticated
+2. **Passport agent registration** — backend executes `kpass agent:register --type <label>` to create the official Passport entry
+3. **Passport verification** — backend verifies the agent exists via retry-with-backoff (`kpass user agents --output json`)
+4. **On-chain registration** — backend (or the connected Web3Auth wallet) calls `AttractorGuard.registerAgent()` with the bytes32-encoded label
+5. **MongoDB sync** — both the on-chain `agentId` and the Passport `agentId` are stored alongside each other
+
+The agent now has a **dual identity**: the Passport DID as the source-of-truth for who owns it, and the on-chain `bytes32` as the indexable key for all gate decisions and payment events.
+
+### Backend endpoints (Passport)
+
+| Method · Path | Notes |
+|---|---|
+| `GET  /api/passport/status` | Wraps `kpass status` — returns `authenticated`, `agentCount`, and the user's full agent list with timestamps |
+| `POST /api/passport/verify` | Verifies a specific agent exists in Passport. Body: `{ agentType }`. Used as a sanity check before on-chain registration. |
+
+### Prerequisites for operators
+
+```bash
+npm install -g @kite/passport-cli      # install kpass CLI
+kpass login                             # authenticate once
+```
+
+The backend reads `kpass`'s session from `~/.kite/credentials` — no extra env vars required.
+
+### Why use Passport instead of a custom contract
+
+| | Custom registry | Kite Agent Passport |
+|---|---|---|
+| Identity authority | Our deployed contract | Kite's official DID system |
+| Cross-app portability | None | Any Kite-native dApp recognises the DID |
+| Cryptographic anchor | Our contract owner | Kite's Passport infrastructure |
+| Listing in Kite ecosystem | Manual | Automatic |
+
+The `AttractorGuard` contract still stores the `bytes32` agentId on-chain (for fast indexing and the gate logic), but **identity itself is owned by Kite Passport**. If KiteGarden disappeared tomorrow, the agent's Passport DID would survive.
+
+### What's actually deployed
+
+There is **nothing to "deploy" for Passport** — it's Kite's existing service. KiteGarden just **uses** it. The integration is purely off-chain (`kpass` CLI calls from our backend) plus the on-chain link via the bytes32 agentId.
+
+---
+
 ## On-chain deployment (Kite Testnet)
 
 | Contract | Address |
